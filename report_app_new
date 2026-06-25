@@ -1,0 +1,1814 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" id="viewport-meta">
+    <title>TMC Service - App Rapporti A4</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        :root { --tmc-blue: #0054a6; --tmc-light-blue: #f0f7ff; --tmc-dark: #222; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 0; background: #525659; color: var(--tmc-dark); }
+
+        /* ── TOGGLE MODALITÀ ── */
+        .mode-toggle-bar {
+            display: flex; align-items: center; justify-content: center;
+            gap: 0; max-width: 210mm; margin: 12px auto; padding: 0 10px;
+        }
+        .mode-toggle-bar button {
+            flex: 1; padding: 10px 8px; border: 1.5px solid var(--tmc-blue);
+            font-size: 13px; font-weight: bold; cursor: pointer;
+            transition: background .15s, color .15s;
+        }
+        .mode-toggle-bar button:first-child { border-radius: 6px 0 0 6px; border-right: none; }
+        .mode-toggle-bar button:last-child  { border-radius: 0 6px 6px 0; }
+        .mode-toggle-bar button.active      { background: var(--tmc-blue); color: white; }
+        .mode-toggle-bar button:not(.active){ background: white; color: var(--tmc-blue); }
+
+        /* ── WIZARD ── */
+        #wizard-view {
+            display: none; max-width: 480px; margin: 0 auto;
+            background: white; min-height: 100vh; padding-bottom: 2rem;
+        }
+        .wiz-prog-wrap { padding: 1rem 1rem 0; background: white; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid #eee; }
+        .wiz-prog-bg   { height: 7px; background: #e0e8f5; border-radius: 4px; overflow: hidden; }
+        .wiz-prog-fill { height: 100%; background: var(--tmc-blue); border-radius: 4px; transition: width .4s ease; }
+        .wiz-step-label{ display: flex; justify-content: space-between; font-size: 11px; color: #888; margin: 5px 0 8px; }
+        .wiz-screen    { padding: 1.1rem 1rem; display: none; }
+        .wiz-screen.active { display: block; }
+        .wiz-head      { margin-bottom: 1.1rem; }
+        .wiz-pill      { display: inline-block; font-size: 11px; font-weight: bold; background: #e6f1fb; color: #0c447c; border-radius: 20px; padding: 3px 10px; margin-bottom: 6px; }
+        .wiz-head h2   { font-size: 19px; font-weight: bold; color: var(--tmc-dark); margin: 0 0 4px; }
+        .wiz-head p    { font-size: 13px; color: #666; margin: 0; }
+        .wiz-field     { margin-bottom: .9rem; }
+        .wiz-field label { display: block; font-size: 11px; font-weight: bold; color: var(--tmc-blue); text-transform: uppercase; margin-bottom: 3px; }
+        .wiz-field input,.wiz-field select,.wiz-field textarea {
+            width: 100%; padding: 10px 12px;
+            border: 1px solid #cce0f5; border-radius: 5px;
+            font-size: 15px; background: white; color: var(--tmc-dark);
+            box-sizing: border-box;
+        }
+        .wiz-field textarea { resize: none; line-height: 1.5; font-family: inherit; }
+        .wiz-field input:focus,.wiz-field select:focus,.wiz-field textarea:focus {
+            outline: none; border-color: var(--tmc-blue); box-shadow: 0 0 0 2px rgba(0,84,166,.1);
+        }
+        .wiz-hint { font-size: 11px; color: #888; margin-top: 3px; }
+        .wiz-sync-btn {
+            width: 100%; padding: 10px; border: 1.5px dashed #b0c8e8;
+            border-radius: 5px; font-size: 13px; font-weight: bold;
+            background: #f0f7ff; color: var(--tmc-blue); cursor: pointer; margin-top: 4px;
+        }
+        .tec-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; margin-top: 4px; }
+        .tec-btn {
+            padding: 11px 6px; border: 1px solid #cce0f5; border-radius: 5px;
+            font-size: 12px; font-weight: bold; background: white;
+            color: var(--tmc-dark); cursor: pointer; text-align: center;
+            transition: background .12s, border-color .12s;
+        }
+        .tec-btn.sel { background: #e6f1fb; border-color: var(--tmc-blue); color: #0c447c; }
+        .orari-group { margin-bottom: 10px; }
+        .orari-group-label { font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; margin-bottom: 4px; }
+        .orari-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .orari-sub { font-size: 10px; color: #aaa; margin-bottom: 2px; }
+        .pch-row { display: flex; gap: 16px; margin-top: 4px; }
+        .pch-item { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: bold; color: var(--tmc-blue); }
+        .pch-item input { width: 22px; height: 22px; cursor: pointer; }
+        .tmpl-card {
+            background: #f8fbff; border: 1px solid #cce0f5; border-radius: 6px;
+            padding: .7rem .9rem; margin-bottom: 8px; cursor: pointer;
+        }
+        .tmpl-card:active { background: #e6f1fb; }
+        .tmpl-card strong { font-size: 13px; color: var(--tmc-blue); display: block; margin-bottom: 2px; }
+        .tmpl-card p { font-size: 12px; color: #666; margin: 0; }
+        .char-bar { font-size: 11px; text-align: right; margin-top: 3px; color: #aaa; }
+        .char-bar.ok   { color: #3B6D11; font-weight: bold; }
+        .char-bar.warn { color: #BA7517; }
+        .recap-row { background: #f8fbff; border-radius: 5px; padding: .6rem .9rem; margin-bottom: 7px; }
+        .recap-row .rl { font-size: 10px; text-transform: uppercase; color: #888; margin-bottom: 2px; }
+        .recap-row .rv { font-size: 14px; font-weight: bold; color: var(--tmc-dark); }
+        .recap-row .rv.miss { color: #A32D2D; }
+        .sig-area {
+            border: 2px dashed #cce0f5; border-radius: 6px; height: 120px;
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; gap: 6px; cursor: pointer;
+            background: #fafafa; font-size: 13px; color: #aaa; font-weight: bold;
+        }
+        .sig-area.signed { border-color: #3B6D11; background: #eaf3de; color: #3B6D11; }
+        .sig-area svg { width: 32px; height: 32px; }
+        .wiz-alert {
+            background: #fff0f0; border: 1px solid #f7c1c1; border-radius: 5px;
+            padding: .65rem .9rem; margin-bottom: .8rem; font-size: 13px; color: #A32D2D;
+            display: none;
+        }
+        .wiz-actions { display: flex; gap: 8px; padding: 1rem; border-top: 1px solid #eee; background: white; position: sticky; bottom: 0; }
+        .wiz-btn-back {
+            flex: 1; padding: 13px; border: 1.5px solid #cce0f5; border-radius: 6px;
+            background: white; font-size: 14px; font-weight: bold;
+            color: #666; cursor: pointer;
+        }
+        .wiz-btn-next {
+            flex: 2; padding: 13px; border: none; border-radius: 6px;
+            background: var(--tmc-blue); color: white;
+            font-size: 14px; font-weight: bold; cursor: pointer;
+        }
+        .wiz-btn-send {
+            flex: 2; padding: 13px; border: none; border-radius: 6px;
+            background: #25D366; color: white;
+            font-size: 14px; font-weight: bold; cursor: pointer;
+        }
+        .wiz-divider { height: 1px; background: #eee; margin: .8rem 0; }
+
+        .mat-item { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid #f0f0f0; }
+        .mat-item:last-child { border-bottom:none; }
+        .mat-check { width:24px; height:24px; cursor:pointer; flex-shrink:0; accent-color:var(--tmc-blue); }
+        .mat-testo { flex:1; font-size:14px; color:var(--tmc-dark); line-height:1.3; }
+        .mat-testo.usato { font-weight:bold; color:var(--tmc-blue); }
+        .mat-qta { width:54px; padding:6px 4px; border:1px solid #cce0f5; border-radius:5px; font-size:15px; font-weight:bold; color:var(--tmc-blue); text-align:center; background:white; }
+        .mat-qta:disabled { background:#f5f5f5; color:#bbb; border-color:#eee; }
+        .mat-badge-lista { display:inline-block; font-size:10px; background:#e6f1fb; color:#0c447c; border-radius:10px; padding:1px 7px; margin-left:4px; }
+        .mat-aggiungi { display:flex; gap:8px; margin-top:12px; align-items:center; }
+        .mat-aggiungi input { flex:1; padding:10px 12px; border:1px solid #cce0f5; border-radius:5px; font-size:14px; background:white; }
+        .mat-aggiungi-btn { padding:10px 14px; background:var(--tmc-blue); color:white; border:none; border-radius:5px; font-size:20px; font-weight:bold; cursor:pointer; flex-shrink:0; }
+        .mat-extra-list { margin-top:6px; }
+        .mat-extra-item { display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid #f5f5f5; }
+        .mat-extra-item input.mat-extra-testo { flex:1; border:none; border-bottom:1px solid #cce0f5; font-size:14px; padding:4px 2px; background:transparent; }
+        .mat-extra-del { background:none; border:none; color:#ff4444; font-size:18px; font-weight:bold; cursor:pointer; padding:0 4px; }
+        .page-a4 { background: white; width: 210mm; min-height: 297mm; margin: 10px auto; padding: 1mm 8mm 2mm 8mm; box-sizing: border-box; box-shadow: 0 0 10px rgba(0,0,0,0.5); display: flex; flex-direction: column; position: relative; }
+        @media screen and (max-width: 210mm) { body { background: white; } .page-a4 { width: 100%; margin: 0; padding: 10px; box-shadow: none; } }
+        body.pdf-mode { background: white !important; }
+        body.pdf-mode .page-a4 { width: 210mm !important; height: auto !important; min-height: auto !important; max-width: none !important; margin: 0 !important; padding: 1mm 8mm !important; box-shadow: none !important; border: none !important; transform: none !important; overflow: visible !important; }
+        body.pdf-mode .no-print { display: none !important; }
+        .banner-static { width: 100%; display: block; }
+        .main-title-container { display: flex; justify-content: space-between; align-items: center; color: var(--tmc-blue); font-weight: bold; border-top: 2px solid var(--tmc-blue); border-bottom: 2px solid var(--tmc-blue); padding: 4px; margin: 5px 0; }
+        .tipo-box { border: 2px solid var(--tmc-blue); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 10px; }
+        .tipo-box.active { background: var(--tmc-blue); color: white; }
+        .card { border: 1px solid var(--tmc-blue); padding: 6px 10px; margin-bottom: 6px; border-radius: 5px; position: relative; }
+        .grid-header { display: grid; grid-template-columns: 1fr 1.5fr; gap: 20px; }
+        .input-field label { font-size: 8px; font-weight: bold; color: var(--tmc-blue); display: block; text-transform: uppercase; margin-bottom: 2px; }
+        input, textarea, select { border: none; border-bottom: 1px solid #cce0f5; padding: 4px 0; font-size: 12px; outline: none; width: 100%; background: transparent; }
+        .caps { text-transform: uppercase; }
+        .tecnico-combo { position: relative; width: 100%; height: 25px; }
+        .tecnico-input-main { position: absolute; top: 0; left: 0; width: calc(100% - 25px); border-bottom: 1px solid #cce0f5; z-index: 2; background: white; text-transform: uppercase; }
+        .tecnico-select-bg { width: 100%; position: relative; z-index: 1; }
+        table { width: 100%; border-collapse: collapse; border: 1px solid var(--tmc-blue); margin-top: 5px; }
+        th { background: var(--tmc-light-blue); font-size: 7px; border: 1px solid var(--tmc-blue); padding: 5px 2px; color: var(--tmc-blue); }
+        td { border: 1px solid var(--tmc-blue); padding: 3px 1px; text-align: center; }
+        .time-select { font-size: 11px; font-weight: bold; color: var(--tmc-blue); background: transparent; border: 1px solid transparent; width: 100%; height: 26px; border-radius: 3px; text-align: center; margin: 0; padding: 0; outline: none; }
+        .pch-row-a4 { display: flex; justify-content: center; gap: 3px; font-size: 9px; font-weight: bold; align-items: center; }
+        .pch-row-a4 input { width: auto; margin: 0; }
+        .bottom-grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 15px; margin-top: auto; padding-top: 5px; }
+        .dotted-line { border-bottom: 1px dotted var(--tmc-blue); height: 18px; margin-bottom: 5px; }
+        .sig-preview { border: 2px dashed var(--tmc-blue); width: 100%; height: 120px; background: #f9f9f9; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 5px; box-sizing: border-box; }
+        .sig-preview img { width: 100%; height: 100%; object-fit: contain; }
+        #signature-overlay { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:white; z-index: 9999; flex-direction: column; }
+        #canvas-fullscreen { flex-grow: 1; border: 3px solid var(--tmc-blue); margin: 15px; background: #fafafa; touch-action: none; }
+        .footer-static { width: 66%; display: block; margin: 5px auto; }
+        .no-print { display: flex; flex-wrap: wrap; gap: 10px; padding: 15px; max-width: 210mm; margin: 0 auto; justify-content: center; }
+        .btn { flex: 1; min-width: 90px; padding: 12px 5px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; color: white; font-size: 11px; text-align: center; }
+        .btn-blue { background: var(--tmc-blue); } .btn-green { background: #25D366; } .btn-orange { background: #ff9800; } .btn-dark { background: #444; }
+        .btn-sync { position: absolute; right: 10px; top: 10px; font-size: 20px; background: none; border: none; cursor: pointer; z-index: 10; }
+        @media print { body { background: white; } .page-a4 { margin: 0; border: none; box-shadow: none; width: 210mm; height: auto; min-height: 297mm; padding: 2mm 8mm; } .no-print, .btn-sync, .mode-toggle-bar { display: none !important; } .card, tr, .bottom-grid, .main-title-container { page-break-inside: avoid; break-inside: avoid; } }
+        #loading-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; color: white; flex-direction: column; justify-content: center; align-items: center; font-family: sans-serif; font-weight: bold; text-align: center; padding: 20px;}
+        .spinner { border: 6px solid #f3f3f3; border-top: 6px solid var(--tmc-blue); border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .overlay-bg { display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(82, 86, 89, 0.95); z-index: 99999; flex-direction: column; justify-content: center; align-items: center; }
+        .modal-box { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); text-align: center; color: var(--tmc-dark); width: 85%; max-width: 450px; }
+        .modal-box input { border: 2px solid var(--tmc-blue); padding: 12px; margin: 20px 0; width: calc(100% - 24px); font-size: 18px; text-align: center; border-radius: 5px; outline: none; }
+        .modal-box button { background: var(--tmc-blue); color: white; border: none; padding: 15px; font-size: 16px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold; }
+        #drafts-overlay { z-index: 99998; }
+        .draft-item { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #ddd; padding:10px 0; text-align:left; gap: 5px;}
+        .modal-time-label { display:block; font-size:11px; font-weight:bold; color:var(--tmc-blue); margin-bottom:3px; }
+        .modal-time-group { display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:15px; background:#f9f9f9; padding:10px; border-radius:5px; border:1px solid #eee; }
+        .modal-time-select { width:100%; padding:10px; font-size:16px; border:1px solid #ccc; border-radius:4px; outline:none; background:white; font-weight:bold; color:var(--tmc-blue); text-align:center; appearance: none; }
+        .ticket-btn { background:#f0f7ff; color:var(--tmc-blue); border:1px solid var(--tmc-blue); padding:10px; text-align:left; border-radius:5px; margin-bottom:8px; width:100%; cursor:pointer; }
+        .ticket-btn:hover { background:var(--tmc-blue); color:white; }
+    </style>
+</head>
+<body>
+    <!-- OVERLAY LOGIN -->
+    <div id="login-overlay" class="overlay-bg">
+        <div class="modal-box">
+            <img src="static/intestazione.jpg" style="width: 100%; margin-bottom: 10px;">
+            <h3 style="color:var(--tmc-blue); margin-bottom: 5px;">Accesso Riservato</h3>
+            <p style="font-size: 12px; color: #666; margin-top: 0;">Inserisci la password aziendale</p>
+            <input type="password" id="pin_input" placeholder="Password">
+            <button id="btn-login" onclick="verificaLogin()">ACCEDI</button>
+            <p id="login-error" style="color:red; font-size:13px; display:none; margin-top:15px; font-weight:bold;">Password errata. Riprova.</p>
+        </div>
+    </div>
+
+    <!-- OVERLAY EMAIL TECNICO (prima volta) -->
+    <div id="email-tecnico-overlay" class="overlay-bg" style="display:none;">
+        <div class="modal-box" style="max-width:420px;">
+            <img src="static/intestazione.jpg" style="width:100%; margin-bottom:12px;">
+            <h3 style="color:var(--tmc-blue); margin:0 0 6px;">La tua email personale</h3>
+            <p style="font-size:13px; color:#666; margin:0 0 4px;">Verrà usata per inviarti una <b>copia di conferma</b> ogni volta che invii un rapporto.</p>
+            <p style="font-size:11px; color:#aaa; margin:0 0 16px;">Viene salvata solo su questo telefono e non verrà mai richiesta di nuovo.</p>
+            <input type="email" id="email_tecnico_input"
+                placeholder="tua@email.it"
+                style="border:2px solid var(--tmc-blue); padding:14px; font-size:16px; text-align:center; border-radius:5px; width:calc(100% - 28px); outline:none; text-transform:none; margin-bottom:8px;">
+            <p id="email-tecnico-err" style="color:red; font-size:12px; display:none; margin:0 0 8px;">Inserisci un indirizzo email valido.</p>
+            <button onclick="salvaEmailTecnico()" style="width:100%; padding:14px; background:var(--tmc-blue); color:white; border:none; border-radius:5px; font-size:15px; font-weight:bold; cursor:pointer; margin-bottom:8px;">SALVA E CONTINUA</button>
+            <button onclick="saltaEmailTecnico()" style="width:100%; padding:10px; background:transparent; color:#aaa; border:1px solid #ddd; border-radius:5px; font-size:12px; cursor:pointer;">Salta per ora (non riceverò conferme)</button>
+        </div>
+    </div>
+
+    <!-- OVERLAY EMAIL -->
+    <div id="email-editor-overlay" class="overlay-bg" style="display:none; padding: 20px; box-sizing: border-box; z-index: 99999;">
+        <div style="background:white; width:100%; max-width: 450px; border-radius:8px; display:flex; flex-direction:column; overflow:hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+            <div style="padding:15px; background:var(--tmc-blue); color:white; text-align:center;"><b style="font-size:16px;">INSERISCI EMAIL CLIENTE</b></div>
+            <div style="padding:25px;"><input type="email" id="modal_email_input" placeholder="nome.cognome@azienda.it" style="width:100%; padding:15px; font-size:18px; text-transform:none; border:2px solid var(--tmc-blue); border-radius:5px; box-sizing:border-box; outline:none; text-align:center;"></div>
+            <div style="display:flex; gap:1px; background:#ddd;">
+                <button onclick="chiudiEditorEmail(false)" style="flex:1; padding:15px; background:#eee; color:#333; border:none; font-weight:bold; cursor:pointer;">ANNULLA</button>
+                <button onclick="chiudiEditorEmail(true)" style="flex:1; padding:15px; background:#25D366; color:white; border:none; font-weight:bold; cursor:pointer;">CONFERMA</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- OVERLAY BOZZE -->
+    <div id="drafts-overlay" class="overlay-bg" style="display:none;">
+        <div class="modal-box" style="max-height: 85%; overflow-y: auto; padding: 15px;">
+            <h3 style="color:var(--tmc-blue); margin-top:0;">Archivio Bozze</h3>
+            <button onclick="salvaBozzaAttuale()" style="background:#ff9800; margin-bottom:15px; font-size:13px; padding:12px;">💾 SALVA RAPPORTO ATTUALE</button>
+            <div style="background:#fff3e0; padding:10px; border-radius:5px; margin-bottom:15px; border:1px solid #ffcc80;">
+                <h4 style="margin:0 0 10px 0; color:#e65100; font-size:12px; text-align:left;">📱 BOZZE SUL DISPOSITIVO (Offline)</h4>
+                <div id="lista-bozze-locali"></div>
+            </div>
+            <div style="background:#e3f2fd; padding:10px; border-radius:5px; margin-bottom:15px; border:1px solid #90caf9;">
+                <h4 style="margin:0 0 10px 0; color:#1565c0; font-size:12px; text-align:left;">☁️ BOZZE CONDIVISE (Cloud)</h4>
+                <div id="lista-bozze-cloud"></div>
+            </div>
+            <button onclick="document.getElementById('drafts-overlay').style.display = 'none';" style="background:#444;">CHIUDI ARCHIVIO</button>
+        </div>
+    </div>
+
+    <!-- OVERLAY SELEZIONE TICKET -->
+    <div id="select-ticket-overlay" class="overlay-bg" style="display:none;">
+        <div class="modal-box" style="max-height: 80%; overflow-y: auto; padding: 20px;">
+            <h3 style="color:var(--tmc-blue); margin-top:0;">Seleziona Intervento</h3>
+            <div id="lista-ticket-trovati" style="margin-bottom: 15px; display:flex; flex-direction:column;"></div>
+            <button onclick="document.getElementById('select-ticket-overlay').style.display='none';" style="background:#444;">ANNULLA</button>
+        </div>
+    </div>
+
+    <!-- OVERLAY TESTO -->
+    <div id="text-editor-overlay" class="overlay-bg" style="display:none; padding: 20px; box-sizing: border-box; z-index: 99999;">
+        <div style="background:white; width:100%; max-width: 600px; height:80%; border-radius:8px; display:flex; flex-direction:column; overflow:hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+            <div style="padding:15px; background:var(--tmc-blue); color:white; text-align:center;"><b style="font-size:16px;">PROBLEMA SEGNALATO / LAVORO ESEGUITO</b></div>
+            <div style="background:#f0f7ff; padding:8px; text-align:center; border-bottom:1px solid #ddd;">
+                <button onclick="inserisciSeparatoreTesto('editor_fullscreen')" style="background:#ff9800; color:white; border:none; padding:8px 15px; border-radius:4px; font-weight:bold; font-size:11px; cursor:pointer;">➖ INSERISCI RIGA "LAVORO ESEGUITO"</button>
+            </div>
+            <textarea id="editor_fullscreen" class="caps" style="flex:1; width:100%; border:none; padding:15px; font-size:16px; outline:none; resize:none; box-sizing:border-box;" placeholder="Scrivi qui tutti i dettagli..."></textarea>
+            <div style="padding:15px; display:flex; gap:10px; background:#f9f9f9; border-top:1px solid #ddd;">
+                <button onclick="chiudiEditorTesto(false)" style="flex:1; padding:15px; background:#eee; color:#333; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">ANNULLA</button>
+                <button onclick="chiudiEditorTesto(true)" style="flex:1; padding:15px; background:#25D366; color:white; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">CONFERMA E SALVA</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- OVERLAY ORARI -->
+    <div id="time-editor-overlay" class="overlay-bg" style="display:none; padding: 10px; box-sizing: border-box; z-index: 99999;">
+        <div style="background:white; width:100%; max-width: 450px; max-height:95%; border-radius:8px; display:flex; flex-direction:column; overflow:hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+            <div style="padding:15px; background:var(--tmc-blue); color:white; text-align:center;"><b id="modal_time_title" style="font-size:16px;">COMPILA ORARI</b></div>
+            <div style="padding:15px; overflow-y:auto; flex:1;">
+                <span class="modal-time-label">DATA INTERVENTO</span><input type="date" id="modal_d" style="width:100%; padding:12px; font-size:16px; margin-bottom:15px; border:1px solid #ccc; border-radius:4px; box-sizing:border-box; color:var(--tmc-blue); font-weight:bold;">
+                <span class="modal-time-label">VIAGGIO (Andata)</span><div class="modal-time-group"><div><div style="font-size:10px; color:#666; margin-bottom:2px;">Da</div><select id="modal_va1" class="modal-time-select" onchange="modalAutoFill(this)"></select></div><div><div style="font-size:10px; color:#666; margin-bottom:2px;">A</div><select id="modal_va2" class="modal-time-select" onchange="modalAutoFill(this)"></select></div></div>
+                <span class="modal-time-label">LAVORO (Mattina)</span><div class="modal-time-group"><div><div style="font-size:10px; color:#666; margin-bottom:2px;">Da</div><select id="modal_lm1" class="modal-time-select" onchange="modalAutoFill(this)"></select></div><div><div style="font-size:10px; color:#666; margin-bottom:2px;">A</div><select id="modal_lm2" class="modal-time-select" onchange="modalAutoFill(this)"></select></div></div>
+                <span class="modal-time-label">LAVORO (Pomeriggio)</span><div class="modal-time-group"><div><div style="font-size:10px; color:#666; margin-bottom:2px;">Da</div><select id="modal_lp1" class="modal-time-select" onchange="modalAutoFill(this)"></select></div><div><div style="font-size:10px; color:#666; margin-bottom:2px;">A</div><select id="modal_lp2" class="modal-time-select" onchange="modalAutoFill(this)"></select></div></div>
+                <span class="modal-time-label">VIAGGIO (Ritorno)</span>
+                <div class="modal-time-group">
+                    <div><div style="font-size:10px; color:#666; margin-bottom:2px;">Da</div><select id="modal_vr1" class="modal-time-select" onchange="modalAutoFill(this); aggiornaVrSelect()"></select></div>
+                    <div><div style="font-size:10px; color:#666; margin-bottom:2px;">A (o Tipo)</div><select id="modal_vr2" class="modal-time-select"></select></div>
+                </div>
+                <span class="modal-time-label">PASTI E PERNOTTAMENTO</span>
+                <div style="display:flex; justify-content:space-around; background:#f0f7ff; padding:15px; border-radius:5px; border:1px solid #cce0f5; margin-bottom:20px;"><label style="font-size:14px; font-weight:bold; color:var(--tmc-blue); display:flex; align-items:center; gap:5px;"><input type="checkbox" id="modal_p" style="width:25px; height:25px;"> Pranzo</label><label style="font-size:14px; font-weight:bold; color:var(--tmc-blue); display:flex; align-items:center; gap:5px;"><input type="checkbox" id="modal_c" style="width:25px; height:25px;"> Cena</label><label style="font-size:14px; font-weight:bold; color:var(--tmc-blue); display:flex; align-items:center; gap:5px;"><input type="checkbox" id="modal_h" style="width:25px; height:25px;"> Hotel</label></div>
+                <div style="background:#fff3e0; padding:15px; border-radius:5px; border:1px solid #ffcc80;"><b style="color:#e65100; font-size:12px; display:block; margin-bottom:5px;">COPIA ORARI SU ALTRO TECNICO:</b><select id="modal_copy_to" style="width:100%; padding:12px; font-size:14px; border:1px solid #ffb74d; border-radius:4px; outline:none; font-weight:bold;"><option value="">-- Non copiare --</option></select></div>
+            </div>
+            <div style="display:flex; gap:1px; background:#ddd;"><button onclick="chiudiEditorOrari(false)" style="flex:1; padding:15px; background:#eee; color:#333; border:none; font-weight:bold; cursor:pointer;">ANNULLA</button><button onclick="chiudiEditorOrari(true)" style="flex:1; padding:15px; background:#25D366; color:white; border:none; font-weight:bold; cursor:pointer;">CONFERMA</button></div>
+        </div>
+    </div>
+
+    <!-- APP CONTENT -->
+    <div id="app-content" style="display:none;">
+
+        <!-- ── TOGGLE MODALITÀ ── -->
+        <div class="mode-toggle-bar no-print">
+            <button id="btn-mode-wiz" class="active" onclick="setMode('wizard')">🧭 Modalità Guidata</button>
+            <button id="btn-mode-a4"  onclick="setMode('a4')">📄 Modulo A4</button>
+        </div>
+
+        <!-- ══════════════════════════════════════════
+             WIZARD VIEW
+        ══════════════════════════════════════════ -->
+        <div id="wizard-view">
+
+            <!-- BARRA PROGRESSO -->
+            <div class="wiz-prog-wrap">
+                <div class="wiz-prog-bg"><div class="wiz-prog-fill" id="wiz-pbar" style="width:20%"></div></div>
+                <div class="wiz-step-label"><span id="wiz-step-lbl">Step 1 di 5</span><span id="wiz-step-name">Intervento</span></div>
+            </div>
+
+            <!-- STEP 1: INTERVENTO -->
+            <div class="wiz-screen active" id="ws1">
+                <div class="wiz-head">
+                    <div class="wiz-pill">Step 1 — Intervento</div>
+                    <h2>Di quale intervento si tratta?</h2>
+                    <p>Cerca per numero ticket <b>oppure</b> per nome tecnico, poi importa.</p>
+                </div>
+                <div class="wiz-alert" id="werr1">⚠️ Numero Ticket e Cliente sono obbligatori.</div>
+
+                <!-- Modalità ricerca -->
+                <div style="display:flex; gap:0; margin-bottom:1rem;">
+                    <button id="s1-tab-tck" onclick="s1SetTab('ticket')"
+                        style="flex:1; padding:9px; border:1.5px solid var(--tmc-blue); border-right:none; border-radius:5px 0 0 5px; font-size:13px; font-weight:bold; background:var(--tmc-blue); color:white; cursor:pointer;">
+                        🔢 Per Ticket
+                    </button>
+                    <button id="s1-tab-tec" onclick="s1SetTab('tecnico')"
+                        style="flex:1; padding:9px; border:1.5px solid var(--tmc-blue); border-radius:0 5px 5px 0; font-size:13px; font-weight:bold; background:white; color:var(--tmc-blue); cursor:pointer;">
+                        👷 Per Tecnico
+                    </button>
+                </div>
+
+                <!-- Ricerca per ticket -->
+                <div id="s1-panel-ticket">
+                    <div class="wiz-field">
+                        <label>N° Ticket</label>
+                        <input type="text" id="w_ticket" placeholder="TCK-1234" oninput="this.value=this.value.toUpperCase(); sincronizzaCampo('n_rapporto_input', this.value);">
+                        <div class="wiz-hint">Scrivi il numero poi tocca il pulsante qui sotto.</div>
+                    </div>
+                </div>
+
+                <!-- Ricerca per tecnico -->
+                <div id="s1-panel-tecnico" style="display:none;">
+                    <div class="wiz-field">
+                        <label>Seleziona il tuo nome</label>
+                        <div class="tec-grid" id="s1-tec-grid" style="grid-template-columns:repeat(2,1fr);">
+                            <button class="tec-btn" onclick="s1SelTec(this)">CARINI MARCO</button>
+                            <button class="tec-btn" onclick="s1SelTec(this)">GAZZOLA MASSIMO</button>
+                            <button class="tec-btn" onclick="s1SelTec(this)">BRAGHIERI STEFANO</button>
+                            <button class="tec-btn" onclick="s1SelTec(this)">CREMONESI NICOLA</button>
+                            <button class="tec-btn" onclick="s1SelTec(this)">POLLEDRI RICCARDO</button>
+                            <button class="tec-btn" onclick="s1SelTec(this)">MARZAROLI EMILIO</button>
+                            <button class="tec-btn" onclick="s1SelTec(this)">LIVIU CIORICI</button>
+                            <button class="tec-btn" onclick="s1SelTec(this)">MARIN CIORESCU</button>
+                            <button class="tec-btn" onclick="s1SelTec(this)">COROLI LORENZO</button>
+                            <button class="tec-btn" onclick="s1SelTec(this)">PICCOLI GIULIANO</button>
+                            <button class="tec-btn" onclick="s1SelTec(this)">MARLIERI GIUSEPPE</button>
+                            <button class="tec-btn" onclick="s1SelTec(this)">IVAN ISOPESCU</button>
+                            <button class="tec-btn" onclick="s1SelTec(this)">MAZZOCCHI MIRCO</button>
+                            <button class="tec-btn" onclick="s1SelTec(this)">MOIA LUIGI</button>
+                            <button class="tec-btn" onclick="s1SelTec(this)">BARBORINI LUIGI</button>
+                            <button class="tec-btn" onclick="s1SelTec(this)">BOSCO MARCO</button>
+                            <button class="tec-btn" onclick="s1SelTec(this)">ATTILIO MASERATI</button>
+                            <button class="tec-btn" onclick="s1SelTec(this)">RIMONDI MARCO</button>
+                        </div>
+                        <div class="wiz-hint" style="margin-top:6px;">Cerca gli interventi di <b id="s1-tec-label">nessun tecnico selezionato</b> di oggi.</div>
+                    </div>
+                    <div class="wiz-divider"></div>
+                    <div class="wiz-field">
+                        <label>✏️ Oppure scrivi il nome (se non in lista)</label>
+                        <div style="display:flex; gap:8px;">
+                            <input type="text" id="s1-tec-libero" placeholder="COGNOME NOME" style="text-transform:uppercase; flex:1;">
+                            <button onclick="s1SelTecLibero()" style="padding:10px 14px; background:var(--tmc-blue); color:white; border:none; border-radius:5px; font-weight:bold; cursor:pointer; white-space:nowrap;">Usa →</button>
+                        </div>
+                    </div>
+                </div>
+
+                <button class="wiz-sync-btn" onclick="wizSync()">🔄 Importa dal calendario aziendale</button>
+                <div class="wiz-divider"></div>
+                <div class="wiz-field">
+                    <label>Cliente</label>
+                    <input type="text" id="w_cliente" placeholder="Ragione sociale cliente" oninput="this.value=this.value.toUpperCase(); sincronizzaCampo('cliente_input', this.value);">
+                </div>
+                <div class="wiz-field">
+                    <label>Sede intervento</label>
+                    <input type="text" id="w_indirizzo" placeholder="Via, Città" oninput="this.value=this.value.toUpperCase(); sincronizzaCampo('indirizzo_input', this.value);">
+                </div>
+                <div class="wiz-field">
+                    <label>Macchina / Matricola</label>
+                    <input type="text" id="w_matricola" placeholder="Es. MK-2200 / SN123456" oninput="this.value=this.value.toUpperCase(); sincronizzaCampo('macchina_input', this.value);">
+                </div>
+            </div>
+
+            <!-- STEP 2: TECNICI -->
+            <div class="wiz-screen" id="ws2">
+                <div class="wiz-head">
+                    <div class="wiz-pill">Step 2 — Tecnici</div>
+                    <h2>Chi ha eseguito l'intervento?</h2>
+                    <p>Seleziona uno o più tecnici. Il primo sarà il responsabile del rapporto.</p>
+                </div>
+                <div class="wiz-alert" id="werr2">⚠️ Seleziona almeno un tecnico.</div>
+                <div class="wiz-field">
+                    <label>Seleziona tecnico/i</label>
+                    <div class="tec-grid" id="wiz-tec-grid">
+                        <button class="tec-btn" onclick="wizToggleTec(this)">CARINI MARCO</button>
+                        <button class="tec-btn" onclick="wizToggleTec(this)">GAZZOLA MASSIMO</button>
+                        <button class="tec-btn" onclick="wizToggleTec(this)">BRAGHIERI STEFANO</button>
+                        <button class="tec-btn" onclick="wizToggleTec(this)">CREMONESI NICOLA</button>
+                        <button class="tec-btn" onclick="wizToggleTec(this)">POLLEDRI RICCARDO</button>
+                        <button class="tec-btn" onclick="wizToggleTec(this)">MARZAROLI EMILIO</button>
+                        <button class="tec-btn" onclick="wizToggleTec(this)">LIVIU CIORICI</button>
+                        <button class="tec-btn" onclick="wizToggleTec(this)">MARIN CIORESCU</button>
+                        <button class="tec-btn" onclick="wizToggleTec(this)">COROLI LORENZO</button>
+                        <button class="tec-btn" onclick="wizToggleTec(this)">PICCOLI GIULIANO</button>
+                        <button class="tec-btn" onclick="wizToggleTec(this)">MARLIERI GIUSEPPE</button>
+                        <button class="tec-btn" onclick="wizToggleTec(this)">IVAN ISOPESCU</button>
+                        <button class="tec-btn" onclick="wizToggleTec(this)">MAZZOCCHI MIRCO</button>
+                        <button class="tec-btn" onclick="wizToggleTec(this)">MOIA LUIGI</button>
+                        <button class="tec-btn" onclick="wizToggleTec(this)">BARBORINI LUIGI</button>
+                        <button class="tec-btn" onclick="wizToggleTec(this)">BOSCO MARCO</button>
+                        <button class="tec-btn" onclick="wizToggleTec(this)">ATTILIO MASERATI</button>
+                        <button class="tec-btn" onclick="wizToggleTec(this)">RIMONDI MARCO</button>
+                    </div>
+                    <!-- Tecnico non in lista -->
+                    <div style="margin-top:10px; display:flex; gap:8px; align-items:center;">
+                        <input type="text" id="wiz-tec-extra-input" placeholder="Tecnico non in lista..." style="flex:1; padding:10px 12px; border:1px solid #cce0f5; border-radius:5px; font-size:14px; text-transform:uppercase;">
+                        <button onclick="wizAgiungiTecExtra()" style="padding:10px 14px; background:var(--tmc-blue); color:white; border:none; border-radius:5px; font-weight:bold; cursor:pointer;">+ Aggiungi</button>
+                    </div>
+                    <div id="wiz-tec-extra-list" style="margin-top:6px;"></div>
+                </div>
+                <div class="wiz-field">
+                    <label>Mezzo di trasporto</label>
+                    <select id="w_mezzo" onchange="sincronizzaCampoSelect('mezzo_trasporto', this.value)">
+                        <option value="MEZZO AZIENDALE">MEZZO AZIENDALE</option>
+                        <option value="MEZZO PROPRIO">MEZZO PROPRIO</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- STEP 3: ORARI -->
+            <div class="wiz-screen" id="ws3">
+                <div class="wiz-head">
+                    <div class="wiz-pill">Step 3 — Orari</div>
+                    <h2>Quando e per quanto tempo?</h2>
+                    <p>Gestisci una o più giornate di intervento. Per ogni giornata scegli i tecnici presenti.</p>
+                </div>
+                <div class="wiz-alert" id="werr3">⚠️ Inserisci almeno un orario di lavoro per la prima giornata.</div>
+
+                <!-- Selettore giornata -->
+                <div style="background:#f8fbff; border:1px solid #cce0f5; border-radius:6px; padding:10px 12px; margin-bottom:12px;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                        <button id="wiz-giorno-prev" onclick="wizCambiaGiorno(-1)"
+                            style="padding:8px 12px; border:1px solid var(--tmc-blue); background:white; color:var(--tmc-blue); border-radius:5px; font-weight:bold; cursor:pointer; font-size:16px;">‹</button>
+                        <div style="flex:1; text-align:center;">
+                            <div style="font-size:11px; color:#888; text-transform:uppercase; font-weight:bold;" id="wiz-giorno-counter">Giornata 1 di 1</div>
+                            <div style="font-size:15px; font-weight:bold; color:var(--tmc-blue);" id="wiz-giorno-label">—</div>
+                        </div>
+                        <button id="wiz-giorno-next" onclick="wizCambiaGiorno(+1)"
+                            style="padding:8px 12px; border:1px solid var(--tmc-blue); background:white; color:var(--tmc-blue); border-radius:5px; font-weight:bold; cursor:pointer; font-size:16px;">›</button>
+                    </div>
+                    <input type="date" id="wiz-giorno-data" oninput="wizSalvaDataGiorno()" style="width:100%; padding:8px; border:1px solid #cce0f5; border-radius:5px; font-size:14px;">
+                    <div style="display:flex; gap:6px; margin-top:8px;">
+                        <button onclick="wizAggiungiGiorno()" style="flex:1; padding:9px; border:1px dashed var(--tmc-blue); background:white; color:var(--tmc-blue); border-radius:5px; font-size:12px; font-weight:bold; cursor:pointer;">+ AGGIUNGI GIORNATA</button>
+                        <button id="wiz-giorno-elimina" onclick="wizEliminaGiorno()" style="flex:0 0 auto; padding:9px 14px; border:none; background:#ff4444; color:white; border-radius:5px; font-size:12px; font-weight:bold; cursor:pointer; display:none;">🗑 ELIMINA</button>
+                    </div>
+                </div>
+
+                <!-- Tecnici presenti in questa giornata -->
+                <div style="background:#fff8e1; border:1px solid #ffe082; border-radius:6px; padding:10px 12px; margin-bottom:12px;">
+                    <div style="font-size:11px; font-weight:bold; color:#7B5800; text-transform:uppercase; margin-bottom:6px;">👷 Tecnici presenti in questa giornata</div>
+                    <div id="wiz-giorno-tecnici-chips" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+                </div>
+
+                <!-- Tab tecnici (filtrati per giornata) -->
+                <div id="wiz-orari-tabs" style="display:flex; gap:0; overflow-x:auto; margin-bottom:0; border-bottom:2px solid var(--tmc-blue);"></div>
+                <div id="wiz-orari-panels"></div>
+
+                <button id="wiz-copia-tutti-btn" onclick="wizCopiaOrariSuTutti()"
+                    style="display:none; width:100%; margin-top:10px; padding:11px; border:1.5px dashed var(--tmc-blue); border-radius:5px; background:#f0f7ff; color:var(--tmc-blue); font-size:13px; font-weight:bold; cursor:pointer;">
+                    📋 Copia orari del primo tecnico su tutti gli altri (questa giornata)
+                </button>
+            </div>
+
+            <!-- STEP 4: DESCRIZIONE -->
+            <div class="wiz-screen" id="ws4">
+                <div class="wiz-head">
+                    <div class="wiz-pill">Step 4 — Descrizione</div>
+                    <h2>Problema e lavoro eseguito</h2>
+                    <p>La sezione <b>PROBLEMA RISCONTRATO</b> è precompilata dal calendario. Compila la sezione <b>LAVORO ESEGUITO</b>.</p>
+                </div>
+                <div class="wiz-alert" id="werr4">⚠️ Compila almeno la sezione LAVORO ESEGUITO (minimo 10 caratteri).</div>
+
+                <!-- Problema dal calendario — sola lettura -->
+                <div class="wiz-field">
+                    <label>🔍 Problema riscontrato (dal calendario)</label>
+                    <textarea id="w_problema" rows="3"
+                        style="background:#f8fbff; color:#555; border-radius:5px; padding:10px 12px; font-size:14px; resize:none; width:100%; box-sizing:border-box; border:1px solid #cce0f5;"
+                        placeholder="Verrà importato automaticamente dal calendario..."
+                        oninput="wizAggiornaTesto()"></textarea>
+                    <div class="wiz-hint">Puoi correggere il testo se necessario.</div>
+                </div>
+
+                <!-- Lavoro eseguito — scrittura libera -->
+                <div class="wiz-field" style="margin-top:.75rem">
+                    <label>🔧 Lavoro eseguito <span style="color:#A32D2D;">*</span></label>
+                    <textarea id="w_lavoro" rows="5"
+                        placeholder="Descrivi gli interventi eseguiti..."
+                        oninput="this.value=this.value.toUpperCase(); wizContaChar(); wizAggiornaTesto();"></textarea>
+                    <div class="char-bar" id="w-char-bar">0 caratteri</div>
+                </div>
+
+                <!-- Stato finale fisso -->
+                <div style="background:#e6f1fb; border-radius:5px; padding:10px 12px; font-size:12px; font-weight:bold; color:#0c447c; margin-top:4px;">
+                    ✅ MACCHINA LASCIATA AL CLIENTE IN FUNZIONE E IN CONDIZIONE DI SICUREZZA
+                </div>
+
+                <!-- Campo nascosto che contiene il testo unificato sincronizzato con A4 -->
+                <input type="hidden" id="w_desc">
+            </div>
+
+            <!-- STEP 4c: ANTEPRIMA A4 OBBLIGATORIA -->
+            <div class="wiz-screen" id="ws4c">
+                <div class="wiz-head">
+                    <div class="wiz-pill" id="ws4c-pill">Step — Anteprima</div>
+                    <h2>Controlla il rapportino</h2>
+                    <p>Visualizza il modulo A4 e verifica che tutto sia corretto prima di procedere.</p>
+                </div>
+                <div style="background:#fff8e1; border:1px solid #ffe082; border-radius:6px; padding:12px 14px; margin-bottom:1rem; font-size:13px; color:#7B5800;">
+                    ⚠️ <b>Passaggio obbligatorio.</b> Devi aprire il modulo A4, controllare eventuali anomalie, e tornare qui per confermare.
+                </div>
+                <button onclick="wizApriA4PerRevisione()"
+                    style="width:100%; padding:14px; background:var(--tmc-blue); color:white; border:none; border-radius:6px; font-size:15px; font-weight:bold; cursor:pointer; margin-bottom:12px;">
+                    📄 Apri Modulo A4 per revisione
+                </button>
+                <div id="ws4c-conferma" style="display:none;">
+                    <div style="background:#eaf3de; border:1px solid #c5e1a5; border-radius:6px; padding:12px 14px; font-size:13px; color:#3B6D11; margin-bottom:12px;">
+                        ✅ Hai visualizzato il modulo A4.
+                    </div>
+                    <label style="display:flex; align-items:center; gap:10px; font-size:14px; font-weight:bold; color:var(--tmc-dark); cursor:pointer; background:#f8fbff; border:1px solid #cce0f5; border-radius:6px; padding:14px;">
+                        <input type="checkbox" id="w_revisione_ok" style="width:24px; height:24px; cursor:pointer; accent-color:var(--tmc-blue);" onchange="wizCheckRevisione()">
+                        Ho verificato il rapportino, è tutto corretto
+                    </label>
+                </div>
+                <div class="wiz-alert" id="werr4c" style="display:none; margin-top:10px;">⚠️ Devi prima aprire il modulo A4 e confermare la verifica.</div>
+            </div>
+
+            <!-- STEP 4b: MATERIALI (condizionale) -->
+            <div class="wiz-screen" id="ws4b">
+                <div class="wiz-head">
+                    <div class="wiz-pill" id="ws4b-pill">Step 5 — Materiali</div>
+                    <h2>Quali materiali hai usato?</h2>
+                    <p>Spunta quello che hai utilizzato e correggi le quantità. Aggiungi in fondo quelli non in lista.</p>
+                </div>
+                <div class="wiz-alert" id="werr4b" style="display:none; background:#fff8e1; border-color:#ffe082; color:#7B5800;">ℹ️ Nessun materiale selezionato. Se non hai usato nulla, premi di nuovo <b>Avanti</b> per continuare.</div>
+
+                <!-- Lista dal calendario -->
+                <div id="mat-lista-calendario"></div>
+
+                <!-- Aggiungi manualmente -->
+                <div class="wiz-divider" style="margin-top:1rem"></div>
+                <div class="wiz-field">
+                    <label>➕ Aggiungi materiale non in lista</label>
+                    <div class="mat-aggiungi">
+                        <input type="text" id="mat-nuovo-testo" placeholder="Descrizione materiale..." style="text-transform:uppercase">
+                        <input type="number" id="mat-nuovo-qta" placeholder="Qtà" min="1" value="1" style="width:64px; padding:10px 8px; border:1px solid #cce0f5; border-radius:5px; font-size:14px; text-align:center;">
+                        <button class="mat-aggiungi-btn" onclick="matAggiungiExtra()">+</button>
+                    </div>
+                </div>
+                <div class="mat-extra-list" id="mat-extra-list"></div>
+            </div>
+
+            <!-- STEP 5: FIRMA + RIEPILOGO -->
+            <div class="wiz-screen" id="ws5">
+                <div class="wiz-head">
+                    <div class="wiz-pill">Step 5 — Firma e invio</div>
+                    <h2>Controlla e fai firmare il cliente.</h2>
+                    <p>Verifica il riepilogo prima di procedere.</p>
+                </div>
+                <div class="wiz-alert" id="werr5">⚠️ La firma del cliente è obbligatoria prima di inviare.</div>
+                <div class="recap-row"><div class="rl">Ticket</div><div class="rv" id="wr_ticket">—</div></div>
+                <div class="recap-row"><div class="rl">Cliente</div><div class="rv" id="wr_cliente">—</div></div>
+                <div class="recap-row"><div class="rl">Tecnico/i</div><div class="rv" id="wr_tecnici">—</div></div>
+                <div class="recap-row"><div class="rl">Data</div><div class="rv" id="wr_data">—</div></div>
+                <div class="recap-row"><div class="rl">Descrizione (anteprima)</div><div class="rv" id="wr_desc" style="font-size:12px;font-weight:400;white-space:pre-wrap;max-height:64px;overflow:hidden">—</div></div>
+                <div class="recap-row" id="wr_mat_row" style="display:none"><div class="rl">Materiali utilizzati</div><div class="rv" id="wr_mat" style="font-size:12px;font-weight:400;">—</div></div>
+
+                <!-- EMAIL con avviso visivo -->
+                <div class="wiz-field" style="margin-top:1rem">
+                    <label>📧 Email cliente <span style="color:#888; font-weight:normal;">(consigliata per invio automatico)</span></label>
+                    <input type="email" id="w_email" placeholder="cliente@azienda.it" style="text-transform:none" oninput="sincronizzaCampo('email_input', this.value); wizCheckEmail();">
+                    <div id="w_email_avviso" style="display:none; margin-top:5px; background:#fff8e1; border:1px solid #ffe082; border-radius:5px; padding:8px 10px; font-size:12px; color:#7B5800;">
+                        ⚠️ Senza email il rapporto verrà inviato solo all'ufficio TMC. Il cliente non riceverà copia.
+                    </div>
+                    <div id="w_email_ok" style="display:none; margin-top:5px; font-size:12px; color:#3B6D11; font-weight:bold;">✅ Email inserita</div>
+                </div>
+
+                <div class="wiz-field">
+                    <label>Firma cliente</label>
+                    <div class="sig-area" id="wiz-sigbox" onclick="openSignature()">
+                        <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 24 Q10 14 16 20 Q22 26 28 8"/><line x1="4" y1="28" x2="28" y2="28"/></svg>
+                        <span>Tocca per far firmare il cliente</span>
+                    </div>
+                </div>
+                <div style="margin-top:.5rem">
+                    <button class="wiz-btn-send" style="width:100%; padding:14px; font-size:15px;" onclick="wizInvia()">📧 Invia rapporto via Email + Calendario</button>
+                    <button style="width:100%; padding:14px; font-size:15px; margin-top:8px; border:none; border-radius:6px; background:#25D366; color:white; font-weight:bold; cursor:pointer;" onclick="wizWhatsapp()">📲 Condividi via WhatsApp</button>
+                    <button style="width:100%; padding:14px; font-size:15px; margin-top:8px; border:1.5px solid #cce0f5; border-radius:6px; background:white; color:var(--tmc-blue); font-weight:bold; cursor:pointer;" onclick="setMode('a4')">📄 Vai al Modulo A4 per rivedere tutto</button>
+                </div>
+            </div>
+
+            <!-- NAVIGAZIONE WIZARD -->
+            <div class="wiz-actions" id="wiz-action-bar">
+                <button class="wiz-btn-back" id="wiz-btn-back" onclick="wizGoBack()" style="display:none">← Indietro</button>
+                <button class="wiz-btn-next" id="wiz-btn-next" onclick="wizGoNext()">Avanti →</button>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════
+             MODULO A4 VIEW (invariato)
+        ══════════════════════════════════════════ -->
+        <div id="a4-view" style="display:none;">
+            <div class="page-a4" id="rapporto-foglio">
+                <img src="static/intestazione.jpg" class="banner-static">
+                <div class="main-title-container">
+                    <div style="display:flex; flex-direction:column; gap:2px;"><span style="display:flex; align-items:center; gap:5px;">RAPPORTO INTERVENTO N. <input type="text" id="n_rapporto_input" name="n_rapporto" class="save-data caps" placeholder="TCK-" style="width:120px; font-size:16px; font-weight:bold; color:var(--tmc-blue);"><button type="button" class="no-print" onclick="importaDaCalendario('ticket')" style="background:var(--tmc-blue); color:white; border:none; border-radius:4px; padding:3px 8px; font-size:12px; cursor:pointer;">🔍 CERCA PER N° TICKET</button></span><span style="font-size:9px; color:#666; font-weight:normal;">ID FATTURAZIONE: <input type="text" id="id_univoco_input" name="id_univoco" class="save-data" readonly style="width:130px; font-size:9px; color:#666; border:none; outline:none; background:transparent;" placeholder="In attesa..."></span></div>
+                    <div style="display:flex; gap:8px;"><div id="box-G" class="tipo-box" onclick="setTipo('G')">GRATUITO</div><div id="box-P" class="tipo-box" onclick="setTipo('P')">PAGAMENTO</div><input type="hidden" name="tipo_int" id="tipo_int_hidden" class="save-data" value="P"></div>
+                </div>
+                <div class="card">
+                    <button type="button" class="btn-sync no-print" onclick="importaDaCalendario('tecnico')" title="Sincronizza Tecnico">👨🏼‍🔧🔄👨🏿‍🔧</button>
+                    <div class="grid-header">
+                        <div>
+                            <div class="input-field" style="margin-bottom:10px;"><label>Tecnico/i Incaricato/i</label><div id="lista-tecnici-inputs"><div class="tecnico-riga" style="display:flex; gap:5px; margin-top:5px;"><div class="tecnico-combo" style="flex:1;"><input type="text" name="tecnico_1" class="save-data tecnico-input-main caps" placeholder="Scrivi o seleziona..."><select class="tecnico-select-bg" onchange="this.previousElementSibling.value=this.value; saveDraft();"><option value=""></option><option>CARINI MARCO</option><option>LIVIU CIORICI</option><option>MARIN CIORESCU</option><option>ATTILIO MASERATI</option><option>POLLEDRI RICCARDO</option><option>GAZZOLA MASSIMO</option><option>BRAGHIERI STEFANO</option><option>COROLI LORENZO</option><option>CREMONESI NICOLA</option><option>MARLIERI GIUSEPPE</option><option>MARZAROLI EMILIO</option><option>PICCOLI GIULIANO</option><option>BARBORINI LUIGI</option><option>IVAN ISOPESCU</option><option>MAZZOCCHI MIRCO</option><option>BOSCO MARCO</option><option>MOIA LUIGI</option><option>RIMONDI MARCO</option></select></div></div></div><button type="button" class="no-print" onclick="aggiungiRigaTecnico()" style="font-size:8px; margin-top:5px; border:1px solid #ccc; background:#fff; cursor:pointer;">+ AGGIUNGI TECNICO</button></div>
+                            <div class="input-field"><label>Mezzo di Trasporto</label><select name="mezzo_trasporto" class="save-data"><option value="MEZZO AZIENDALE">MEZZO AZIENDALE</option><option value="MEZZO PROPRIO">MEZZO PROPRIO</option></select></div>
+                        </div>
+                        <div style="border-left: 1px solid #eee; padding-left: 20px;">
+                            <div class="input-field" style="margin-bottom:12px;"><label>Cliente</label><input type="text" id="cliente_input" name="cliente" class="save-data caps" style="font-size:14px; font-weight:bold;"></div>
+                            <div class="input-field" style="margin-bottom:12px;"><label>Sede Intervento</label><textarea id="indirizzo_input" name="indirizzo" class="save-data caps" rows="2" style="font-family: inherit; resize: none; overflow: hidden; padding: 2px 0;"></textarea></div>
+                            <div style="display:flex; gap:10px;"><div class="input-field" style="flex:1;"><label>Macchina / Matr.</label><input type="text" id="macchina_input" name="macchina" class="save-data caps"></div><div class="input-field" style="flex:1;"><label>Email Cliente</label><input type="email" id="email_input" name="email_cliente" class="save-data" placeholder="Tocca per inserire..." style="text-transform:none; cursor:pointer; background:#f0f7ff;" readonly onclick="apriEditorEmail()"></div></div>
+                        </div>
+                    </div>
+                </div>
+                <table><thead><tr><th rowspan="2" style="width: 8%;">DATA</th><th rowspan="2" style="width: 16%;">TECNICO</th><th colspan="2">VIAGGIO (A)</th><th colspan="2">LAVORO (M)</th><th colspan="2">LAVORO (P)</th><th colspan="2">VIAGGIO (R)</th><th rowspan="2" style="width: 8%;">P / C / H</th><th rowspan="2" class="no-print" style="width: 3%;"></th></tr><tr style="font-size:5px;"><th>DA</th><th>A</th><th>DA</th><th>A</th><th>DA</th><th>A</th><th>DA</th><th>A</th></tr></thead><tbody id="table-body"></tbody></table>
+                <p class="no-print" style="text-align:center; font-size:9px; color:#666; margin-top:2px;">👆 Tocca la data o gli orari nella tabella per aprire l'inserimento rapido</p>
+                <div class="card" style="margin-top:10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;"><label style="color:var(--tmc-blue); font-weight:bold; margin:0;">PROBLEMA SEGNALATO / LAVORO ESEGUITO</label><div style="display:flex; gap:5px;">
+                        <button type="button" class="no-print" onclick="inserisciSeparatoreTesto('descrizione_input')" style="background:#ff9800; color:white; border:none; border-radius:3px; font-size:9px; padding:3px 8px; font-weight:bold; cursor:pointer;">➖ SEPARA LAVORO</button>
+                        <button type="button" class="no-print" onclick="apriEditorTesto()" style="background:var(--tmc-light-blue); color:var(--tmc-blue); border:1px solid var(--tmc-blue); border-radius:3px; font-size:9px; padding:3px 8px; font-weight:bold; cursor:pointer;">⛶ ESPANDI</button>
+                    </div></div>
+                    <textarea id="descrizione_input" name="descrizione" class="save-data caps" rows="3" style="margin-top:5px;"></textarea><div id="descrizione_print" class="caps" style="display:none; white-space: pre-wrap; word-break: break-word; font-size: 12px; min-height: 45px; border-bottom: 1px solid #cce0f5; padding: 4px 0;"></div>
+                </div>
+                <table><thead><tr><th style="width:15%">CODICE</th><th style="width:45%">RICAMBIO</th><th style="width:10%">Q.TÀ</th><th style="width:15%">UNIT. €</th><th style="width:15%">TOT. €</th></tr></thead><tbody id="ricambi-body"></tbody><tfoot><tr><td colspan="4" style="text-align:right; font-weight:bold; padding-right:5px;">TOTALE MATERIALI:</td><td><input type="text" id="gran-totale" name="gran_totale" class="save-data" style="font-weight:bold; color:var(--tmc-blue); width:100%; text-align:center; background:transparent;" placeholder="0.00 €"></td></tr></tfoot></table>
+                <div class="bottom-grid">
+                    <div class="notes-box card" style="margin:0;">
+                        <label>NOTE / RIEPILOGO SPESE</label>
+                        <div style="font-size:7px;">ORE TOTALI: <span id="tot_lavoro_span" style="color:var(--tmc-blue); font-weight:bold; font-size:10px;"></span><div class="dotted-line"></div></div>
+                        <div style="font-size:7px;">KM: <span id="tot_viaggio_span"></span><div class="dotted-line"></div></div>
+                        <div style="font-size:7px;">PASTI: <span id="tot_pch_span" style="color:var(--tmc-blue); font-weight:bold; font-size:10px;"></span><div class="dotted-line"></div></div>
+                        <div style="font-size:7px;">HOTEL: <span id="tot_hotel_span" style="color:var(--tmc-blue); font-weight:bold; font-size:10px;"></span><div class="dotted-line"></div></div>
+                    </div>
+                    <div class="sig-box" style="display:flex; flex-direction:column; justify-content:flex-end;"><div class="input-field" style="margin-bottom: 5px;"><label style="color:var(--tmc-blue); font-weight:bold; font-size:8px;">RESPONSABILE (NOME E COGNOME)</label><input type="text" name="nome_responsabile" class="save-data caps" style="font-size:12px; font-weight:bold; border-bottom: 1px solid var(--tmc-blue); text-align:center;"></div><label style="color:var(--tmc-blue); font-weight:bold; font-size:8px;">FIRMA CLIENTE (TOCCA PER FIRMARE)</label><div id="firma-preview" class="sig-preview" onclick="openSignature()"><span id="placeholder-firma" style="color:#aaa; font-size:10px; text-align:center;">Firma a schermo intero</span><img id="sig-image" src="" style="display:none;"></div></div>
+                </div>
+                <img src="static/piede.jpg" class="footer-static">
+            </div>
+            <div class="no-print">
+                <button class="btn btn-dark" onclick="addRow()">+ GIORNO/TECNICO</button>
+                <button class="btn btn-dark" onclick="addRicambio()">+ RICAMBIO</button>
+                <button class="btn btn-orange" style="background:#ff9800; min-width:100%;" onclick="apriBozze()">📂 ARCHIVIO BOZZE</button>
+                <button class="btn btn-blue" onclick="salvaPDF()">SALVA PDF (Solo Cellulare)</button>
+                <button class="btn btn-green" onclick="condividiWhatsApp()">WHATSAPP + CALENDARIO</button>
+                <button class="btn btn-orange" style="background:#e91e63;" onclick="inviaEmailAutomaticamente()">INVIA EMAIL + CALENDARIO</button>
+                <button class="btn" style="background:red;" onclick="nuovoRapporto()">RESET NUOVO</button>
+                <button class="btn btn-dark" style="background:#607d8b;" onclick="modificaEmailTecnico()">✉️ MIA EMAIL CONFERMA</button>
+                <button class="btn btn-dark" style="min-width: 100%; margin-top: 10px;" onclick="esciApp()">🔒 ESCI E RIMUOVI AUTORIZZAZIONE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- OVERLAY ESITO INVIO EMAIL -->
+    <div id="email-result-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:10001; align-items:center; justify-content:center; padding:20px; box-sizing:border-box;">
+        <div style="background:white; border-radius:10px; padding:28px 24px; width:100%; max-width:400px; text-align:center; box-shadow:0 4px 20px rgba(0,0,0,0.4);">
+            <div id="er-icon" style="font-size:52px; margin-bottom:12px;"></div>
+            <h3 id="er-titolo" style="margin:0 0 8px; font-size:18px;"></h3>
+            <p id="er-dettaglio" style="font-size:13px; color:#555; margin:0 0 20px; line-height:1.5;"></p>
+            <div id="er-destinatari" style="background:#f8fbff; border-radius:6px; padding:10px 14px; font-size:12px; color:#444; text-align:left; margin-bottom:20px; display:none;"></div>
+            <button id="er-btn-ok" onclick="chiudiEsitoEmail()" style="width:100%; padding:13px; background:var(--tmc-blue); color:white; border:none; border-radius:6px; font-size:15px; font-weight:bold; cursor:pointer;">OK</button>
+        </div>
+    </div>
+
+    <!-- FIRMA CANVAS -->
+    <div id="signature-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:white; z-index:9999; flex-direction:column;">
+        <div style="padding:15px; background:var(--tmc-blue); color:white; display:flex; justify-content:space-between; align-items:center;"><b>FIRMA CLIENTE</b><button onclick="closeSignature(true)" style="background:white; color:var(--tmc-blue); border:none; padding:8px 15px; border-radius:4px; font-weight:bold;">CONFERMA</button></div>
+        <canvas id="canvas-fullscreen" style="flex-grow:1; border:3px solid var(--tmc-blue); margin:15px; background:#fafafa; touch-action:none;"></canvas>
+        <div style="padding:15px; display:flex; gap:10px;"><button onclick="clearSignature()" style="flex:1; padding:15px; background:#eee; border:none; border-radius:4px;">CANCELLA</button><button onclick="closeSignature(false)" style="flex:1; padding:15px; background:#ff4444; color:white; border:none; border-radius:4px;">ANNULLA</button></div>
+    </div>
+
+    <div id="loading-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:10000; color:white; flex-direction:column; justify-content:center; align-items:center; font-family:sans-serif; font-weight:bold; text-align:center; padding:20px;">
+        <div class="spinner"></div><div id="loading-text">Attendere...</div>
+    </div>
+
+    <script>
+    const APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwflYcjnY-wzmJBmf8LlRh00vDx-L4ckMISLP27b6Upz7x6eK-1HJeb4EAywFI2R2RxlA/exec";
+    const FRASE_SICUREZZA = "";
+    const RIT_LABEL = "+ RIT.";
+
+    // ═══════════════════════════════════════════════
+    // TOGGLE MODALITÀ
+    // ═══════════════════════════════════════════════
+    function setMode(mode) {
+        const isWiz = mode === 'wizard';
+        document.getElementById('wizard-view').style.display = isWiz ? 'block' : 'none';
+        document.getElementById('a4-view').style.display     = isWiz ? 'none'  : 'block';
+        document.getElementById('btn-mode-wiz').className    = isWiz ? 'active' : '';
+        document.getElementById('btn-mode-a4').className     = isWiz ? '' : 'active';
+        // Quando si passa al modulo A4, aggiorna tutti i totali
+        if (!isWiz) calc();
+        localStorage.setItem('tmc_mode', mode);
+    }
+
+    // ═══════════════════════════════════════════════
+    // WIZARD — stato
+    // ═══════════════════════════════════════════════
+    let wizCur = 1;
+    // wizSteps: sequenza step attivi. '4b'=materiali e '4c'=anteprima A4 sono condizionali
+    let wizSteps = [1, 2, 3, 4, '4c', 5];
+    const WIZ_NAMES_MAP = {
+        1: 'Intervento', 2: 'Tecnici', 3: 'Orari',
+        4: 'Descrizione', '4b': 'Materiali', '4c': 'Anteprima A4', 5: 'Firma e invio'
+    };
+
+    // Materiali dal calendario
+    let matDaCalendario = [];
+    let matExtra = [];
+
+    // Orari per tecnico: { nomeTecnico: {va1,va2,lm1,lm2,lp1,lp2,vr1,vr2,p,c,h} }
+    // Orari multi-giornata (vedi STEP 3)
+    let wizGiornate = [];      // [{data, tecniciPresenti:[], orari:{nome:{...}}}]
+    let wizGiornoIdx = 0;
+    let wizTabOrariAttiva = 0;
+
+    // Tecnico ricercato in step 1 (modalità per tecnico)
+    let s1TecnicoSelezionato = '';
+    let s1Modalita = 'ticket';
+
+    function wizTotaleStep() { return wizSteps.length; }
+    function wizPosizione()  { return wizSteps.indexOf(wizCur) + 1; }
+
+    function wizUpdateProgress() {
+        const pos = wizPosizione();
+        const tot = wizTotaleStep();
+        document.getElementById('wiz-pbar').style.width = (pos / tot * 100) + '%';
+        document.getElementById('wiz-step-lbl').textContent  = 'Step ' + pos + ' di ' + tot;
+        document.getElementById('wiz-step-name').textContent = WIZ_NAMES_MAP[wizCur] || '';
+        document.getElementById('wiz-btn-back').style.display = pos > 1 ? 'block' : 'none';
+        const btnNext = document.getElementById('wiz-btn-next');
+        btnNext.style.display = wizCur !== 5 ? 'block' : 'none';
+        // Aggiorna pill dinamiche
+        ['4b','4c'].forEach(k => {
+            const el = document.getElementById('ws'+k+'-pill');
+            if (el) el.textContent = 'Step ' + (wizSteps.indexOf(k)+1) + ' — ' + WIZ_NAMES_MAP[k];
+        });
+    }
+
+    function wizShowScreen(step) {
+        document.querySelectorAll('.wiz-screen').forEach(s => {
+            s.classList.remove('active');
+            s.style.display = ''; // rimuove qualsiasi override inline, lascia decidere il CSS
+        });
+        const el = document.getElementById('ws' + step);
+        if (el) {
+            el.style.display = ''; // CSS .wiz-screen.active = display:block si occupa del resto
+            el.classList.add('active');
+        }
+        wizCur = step;
+        wizUpdateProgress();
+        if (step === 3)    wizRenderGiorno();
+        if (step === 5)    { wizPopolaRiepilogo(); wizCheckEmail(); }
+        window.scrollTo(0, 0);
+    }
+
+    function wizGoNext() {
+        let valid = true;
+        const errEl = document.getElementById('werr' + wizCur);
+        if (errEl) errEl.style.display = 'none';
+        if (wizCur === 1)    { valid = wizVal1();   if (!valid) document.getElementById('werr1').style.display = 'block'; }
+        if (wizCur === 2)    { valid = wizVal2();   if (!valid) document.getElementById('werr2').style.display = 'block'; wizRenderGiorno(); }
+        if (wizCur === 3)    { valid = wizVal3();   if (!valid) document.getElementById('werr3').style.display = 'block'; else wizSyncAllOrariA4(); }
+        if (wizCur === 4)    { valid = wizVal4();   if (!valid) document.getElementById('werr4').style.display = 'block'; }
+        if (wizCur === '4c') { valid = wizVal4c();  if (!valid) document.getElementById('werr4c').style.display = 'block'; }
+        if (wizCur === '4b') {
+            // Sincronizza sempre i materiali verso A4, poi procedi
+            matSyncA4();
+            // Se nulla è selezionato, mostra avviso informativo ma non blocca
+            const hasSel = [...document.querySelectorAll('.mat-check')].some(cb => cb.checked) || matExtra.length > 0;
+            if (!hasSel) {
+                document.getElementById('werr4b').style.display = 'block';
+                // Avviso non bloccante: dopo 2 secondi procede da solo, oppure l'utente clicca ancora Avanti
+                if (!wizCur4bAvvisato) {
+                    wizCur4bAvvisato = true;
+                    return; // Prima pressione: mostra avviso
+                }
+                // Seconda pressione: procede comunque
+            }
+            wizCur4bAvvisato = false;
+            document.getElementById('werr4b').style.display = 'none';
+        }
+        if (!valid) return;
+        const idx = wizSteps.indexOf(wizCur);
+        if (idx < wizSteps.length - 1) wizShowScreen(wizSteps[idx + 1]);
+    }
+
+    function wizGoBack() {
+        hideAllWizErrors();
+        const idx = wizSteps.indexOf(wizCur);
+        if (idx > 0) wizShowScreen(wizSteps[idx - 1]);
+    }
+
+    function hideAllWizErrors() {
+        [1,2,3,4,'4b','4c',5].forEach(i => {
+            const el = document.getElementById('werr' + i);
+            if (el) el.style.display = 'none';
+        });
+    }
+
+    // Aggiorna stepper: inserisce/rimuove '4b' (materiali) dopo 4, prima di '4c'
+    function wizAggiornaStepper(hasMateriali) {
+        wizSteps = wizSteps.filter(s => s !== '4b');
+        if (hasMateriali) {
+            const idx4 = wizSteps.indexOf(4);
+            wizSteps.splice(idx4 + 1, 0, '4b');
+        }
+        wizUpdateProgress();
+    }
+
+    // ── STEP 1: tab ticket / tecnico ─────────────────────────
+    function s1SetTab(modo) {
+        s1Modalita = modo;
+        document.getElementById('s1-panel-ticket').style.display  = modo === 'ticket'  ? 'block' : 'none';
+        document.getElementById('s1-panel-tecnico').style.display = modo === 'tecnico' ? 'block' : 'none';
+        document.getElementById('s1-tab-tck').style.background  = modo === 'ticket'  ? 'var(--tmc-blue)' : 'white';
+        document.getElementById('s1-tab-tck').style.color       = modo === 'ticket'  ? 'white' : 'var(--tmc-blue)';
+        document.getElementById('s1-tab-tec').style.background  = modo === 'tecnico' ? 'var(--tmc-blue)' : 'white';
+        document.getElementById('s1-tab-tec').style.color       = modo === 'tecnico' ? 'white' : 'var(--tmc-blue)';
+    }
+
+    function s1SelTec(btn) {
+        document.querySelectorAll('#s1-tec-grid .tec-btn').forEach(b => b.classList.remove('sel'));
+        btn.classList.add('sel');
+        s1TecnicoSelezionato = btn.textContent.trim();
+        document.getElementById('s1-tec-label').textContent = s1TecnicoSelezionato;
+        document.getElementById('s1-tec-libero').value = '';
+        document.querySelectorAll('#wiz-tec-grid .tec-btn').forEach(b => {
+            if (b.textContent.trim() === s1TecnicoSelezionato) b.classList.add('sel');
+        });
+    }
+
+    function s1SelTecLibero() {
+        const nome = document.getElementById('s1-tec-libero').value.trim().toUpperCase();
+        if (!nome) return;
+        // Deseleziona griglia
+        document.querySelectorAll('#s1-tec-grid .tec-btn').forEach(b => b.classList.remove('sel'));
+        s1TecnicoSelezionato = nome;
+        document.getElementById('s1-tec-label').textContent = nome;
+        // Aggiunge o seleziona nel wizard step 2 come tecnico extra
+        wizAgiungiTecNomeEsterno(nome);
+    }
+
+    // ── VALIDAZIONI ───────────────────────────────────────────
+    function wizVal1() {
+        document.getElementById('werr1').style.display = 'none';
+        return document.getElementById('w_ticket').value.trim() &&
+               document.getElementById('w_cliente').value.trim();
+    }
+    function wizVal2() {
+        document.getElementById('werr2').style.display = 'none';
+        return wizGetTuttiTecnici().length > 0;
+    }
+    function wizVal3() {
+        document.getElementById('werr3').style.display = 'none';
+        // Salva orari correnti prima di validare
+        wizSalvaOrariTabCorrente();
+        // Almeno una giornata deve avere un tecnico con orario di lavoro
+        if (!wizGiornate.length) return false;
+        for (const g of wizGiornate) {
+            for (const nome of g.tecniciPresenti) {
+                const o = g.orari[nome] || {};
+                if ((o.lm1 && o.lm2) || (o.lp1 && o.lp2)) return true;
+            }
+        }
+        return false;
+    }
+    function wizVal4() {
+        document.getElementById('werr4').style.display = 'none';
+        const lavoro = (document.getElementById('w_lavoro')?.value || '').trim();
+        return lavoro.length >= 10;
+    }
+    function wizVal4c() {
+        document.getElementById('werr4c').style.display = 'none';
+        return document.getElementById('w_revisione_ok')?.checked;
+    }
+
+    // ── STEP 3: ORARI MULTI-GIORNO ───────────────────────────
+    const CAMPI_ORARI = ['va1','va2','lm1','lm2','lp1','lp2','vr1','vr2'];
+    // wizGiornate, wizGiornoIdx, wizTabOrariAttiva sono dichiarate in cima
+
+    function wizGiornoCorrente() { return wizGiornate[wizGiornoIdx] || null; }
+
+    function wizInizializzaPrimaGiornata() {
+        if (wizGiornate.length === 0) {
+            const oggi = new Date().toISOString().split('T')[0];
+            wizGiornate.push({
+                data: oggi,
+                tecniciPresenti: [...wizGetTuttiTecnici()],
+                orari: {}
+            });
+            wizGiornoIdx = 0;
+        }
+    }
+
+    function wizAggiungiGiorno() {
+        wizSalvaOrariTabCorrente();
+        // Default: stessa data + 1 giorno della precedente, stessi tecnici
+        let dataDefault = new Date().toISOString().split('T')[0];
+        if (wizGiornate.length > 0) {
+            const ultima = wizGiornate[wizGiornate.length - 1].data;
+            if (ultima) {
+                const d = new Date(ultima + 'T12:00');
+                d.setDate(d.getDate() + 1);
+                dataDefault = d.toISOString().split('T')[0];
+            }
+        }
+        wizGiornate.push({
+            data: dataDefault,
+            tecniciPresenti: [...wizGetTuttiTecnici()],
+            orari: {}
+        });
+        wizGiornoIdx = wizGiornate.length - 1;
+        wizTabOrariAttiva = 0;
+        wizRenderGiorno();
+    }
+
+    function wizEliminaGiorno() {
+        if (wizGiornate.length <= 1) { alert('Deve esserci almeno una giornata.'); return; }
+        if (!confirm('Eliminare questa giornata? Tutti gli orari inseriti andranno persi.')) return;
+        wizGiornate.splice(wizGiornoIdx, 1);
+        if (wizGiornoIdx >= wizGiornate.length) wizGiornoIdx = wizGiornate.length - 1;
+        wizTabOrariAttiva = 0;
+        wizRenderGiorno();
+    }
+
+    function wizCambiaGiorno(delta) {
+        wizSalvaOrariTabCorrente();
+        const nuovo = wizGiornoIdx + delta;
+        if (nuovo < 0 || nuovo >= wizGiornate.length) return;
+        wizGiornoIdx = nuovo;
+        wizTabOrariAttiva = 0;
+        wizRenderGiorno();
+    }
+
+    function wizSalvaDataGiorno() {
+        const g = wizGiornoCorrente();
+        if (!g) return;
+        g.data = document.getElementById('wiz-giorno-data').value;
+        // Aggiorna label
+        const lbl = document.getElementById('wiz-giorno-label');
+        lbl.textContent = g.data
+            ? new Date(g.data + 'T12:00').toLocaleDateString('it-IT', {weekday:'long',day:'2-digit',month:'long',year:'numeric'})
+            : 'Data non impostata';
+    }
+
+    function wizToggleTecGiorno(nome) {
+        const g = wizGiornoCorrente();
+        if (!g) return;
+        wizSalvaOrariTabCorrente();
+        const idx = g.tecniciPresenti.indexOf(nome);
+        if (idx === -1) g.tecniciPresenti.push(nome);
+        else g.tecniciPresenti.splice(idx, 1);
+        if (wizTabOrariAttiva >= g.tecniciPresenti.length) wizTabOrariAttiva = 0;
+        wizRenderGiorno();
+    }
+
+    function wizRenderGiorno() {
+        wizInizializzaPrimaGiornata();
+        const g = wizGiornoCorrente();
+        if (!g) return;
+
+        // Header navigazione giornata
+        document.getElementById('wiz-giorno-counter').textContent = `Giornata ${wizGiornoIdx + 1} di ${wizGiornate.length}`;
+        document.getElementById('wiz-giorno-data').value = g.data || '';
+        document.getElementById('wiz-giorno-label').textContent = g.data
+            ? new Date(g.data + 'T12:00').toLocaleDateString('it-IT', {weekday:'long',day:'2-digit',month:'long',year:'numeric'})
+            : 'Data non impostata';
+        document.getElementById('wiz-giorno-prev').disabled = wizGiornoIdx === 0;
+        document.getElementById('wiz-giorno-next').disabled = wizGiornoIdx === wizGiornate.length - 1;
+        document.getElementById('wiz-giorno-prev').style.opacity = wizGiornoIdx === 0 ? '0.4' : '1';
+        document.getElementById('wiz-giorno-next').style.opacity = wizGiornoIdx === wizGiornate.length - 1 ? '0.4' : '1';
+        document.getElementById('wiz-giorno-elimina').style.display = wizGiornate.length > 1 ? 'block' : 'none';
+
+        // Chip tecnici presenti
+        const chipsEl = document.getElementById('wiz-giorno-tecnici-chips');
+        const tuttiTecnici = wizGetTuttiTecnici();
+        chipsEl.innerHTML = '';
+        if (tuttiTecnici.length === 0) {
+            chipsEl.innerHTML = '<span style="font-size:12px; color:#a32d2d;">⚠️ Torna allo Step 2 per selezionare almeno un tecnico.</span>';
+        } else {
+            tuttiTecnici.forEach(nome => {
+                const presente = g.tecniciPresenti.includes(nome);
+                const chip = document.createElement('button');
+                chip.textContent = (presente ? '✓ ' : '+ ') + nome;
+                chip.onclick = () => wizToggleTecGiorno(nome);
+                chip.style.cssText = `padding:6px 11px; border:1px solid ${presente ? 'var(--tmc-blue)' : '#ccc'}; background:${presente ? 'var(--tmc-blue)' : 'white'}; color:${presente ? 'white' : '#888'}; border-radius:14px; font-size:11px; font-weight:bold; cursor:pointer;`;
+                chipsEl.appendChild(chip);
+            });
+        }
+
+        // Render tab tecnici e panel orari
+        const tabBar   = document.getElementById('wiz-orari-tabs');
+        const panelsEl = document.getElementById('wiz-orari-panels');
+        const copiaBtn = document.getElementById('wiz-copia-tutti-btn');
+        const presenti = g.tecniciPresenti;
+
+        tabBar.innerHTML = '';
+        panelsEl.innerHTML = '';
+
+        if (presenti.length === 0) {
+            panelsEl.innerHTML = '<div style="padding:20px; text-align:center; color:#888; font-size:13px;">Nessun tecnico presente in questa giornata.<br>Aggiungi un tecnico dai chip qui sopra.</div>';
+            copiaBtn.style.display = 'none';
+            return;
+        }
+
+        // Inizializza orari per tecnici nuovi
+        presenti.forEach(n => { if (!g.orari[n]) g.orari[n] = {}; });
+
+        if (wizTabOrariAttiva >= presenti.length) wizTabOrariAttiva = 0;
+
+        // Tabs tecnici
+        presenti.forEach((nome, idx) => {
+            const btn = document.createElement('button');
+            btn.textContent = nome.split(' ')[0];
+            btn.style.cssText = `flex:1; padding:9px 6px; border:none; border-bottom:${idx===wizTabOrariAttiva?'3px solid var(--tmc-blue)':'3px solid transparent'}; font-size:12px; font-weight:bold; background:${idx===wizTabOrariAttiva?'#f0f7ff':'white'}; color:${idx===wizTabOrariAttiva?'var(--tmc-blue)':'#888'}; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;`;
+            btn.onclick = () => { wizSalvaOrariTabCorrente(); wizTabOrariAttiva = idx; wizRenderGiorno(); };
+            tabBar.appendChild(btn);
+        });
+
+        // Panel tecnico attivo
+        const nomeTecnico = presenti[wizTabOrariAttiva];
+        const o = g.orari[nomeTecnico] || {};
+        panelsEl.innerHTML = `
+        <div style="padding:10px 0;">
+            <div style="font-size:11px; color:#888; margin-bottom:10px; padding:6px 10px; background:#f8fbff; border-radius:5px; text-align:center;">
+                <b style="color:var(--tmc-blue);">${nomeTecnico}</b>
+            </div>
+            ${renderOrariGroup('Viaggio andata',   'va1', 'va2', o)}
+            ${renderOrariGroup('Lavoro mattina',   'lm1', 'lm2', o)}
+            ${renderOrariGroup('Lavoro pomeriggio','lp1', 'lp2', o)}
+            ${renderOrariGroup('Viaggio ritorno',  'vr1', 'vr2', o)}
+            <div class="wiz-field" style="margin-top:8px;">
+                <label>Pasti e pernottamento</label>
+                <div class="pch-row">
+                    <label class="pch-item"><input type="checkbox" id="wt_p" ${o.p?'checked':''} onchange="wizSalvaOrariTabCorrente()"> Pranzo</label>
+                    <label class="pch-item"><input type="checkbox" id="wt_c" ${o.c?'checked':''} onchange="wizSalvaOrariTabCorrente()"> Cena</label>
+                    <label class="pch-item"><input type="checkbox" id="wt_h" ${o.h?'checked':''} onchange="wizSalvaOrariTabCorrente()"> Hotel</label>
+                </div>
+            </div>
+        </div>`;
+
+        copiaBtn.style.display = presenti.length > 1 ? 'block' : 'none';
+    }
+
+    function renderOrariGroup(label, id1, id2, o) {
+        return `<div class="orari-group">
+            <div class="orari-group-label">${label}</div>
+            <div class="orari-row">
+                <div><div class="orari-sub">Da</div><input type="time" id="wt_${id1}" value="${o[id1]||''}" oninput="wizSalvaOrariTabCorrente()"></div>
+                <div><div class="orari-sub">A</div><input type="time" id="wt_${id2}" value="${o[id2]||''}" oninput="wizSalvaOrariTabCorrente()"></div>
+            </div>
+        </div>`;
+    }
+
+    function wizSalvaOrariTabCorrente() {
+        const g = wizGiornoCorrente();
+        if (!g || !g.tecniciPresenti.length) return;
+        const nome = g.tecniciPresenti[wizTabOrariAttiva];
+        if (!nome) return;
+        const o = {};
+        CAMPI_ORARI.forEach(f => { const el = document.getElementById('wt_'+f); if(el) o[f] = el.value; });
+        o.p = document.getElementById('wt_p')?.checked || false;
+        o.c = document.getElementById('wt_c')?.checked || false;
+        o.h = document.getElementById('wt_h')?.checked || false;
+        g.orari[nome] = o;
+    }
+
+    function wizCopiaOrariSuTutti() {
+        const g = wizGiornoCorrente();
+        if (!g || g.tecniciPresenti.length < 2) return;
+        wizSalvaOrariTabCorrente();
+        const orariBase = { ...g.orari[g.tecniciPresenti[wizTabOrariAttiva]] };
+        for (let i = 0; i < g.tecniciPresenti.length; i++) {
+            if (i !== wizTabOrariAttiva) g.orari[g.tecniciPresenti[i]] = { ...orariBase };
+        }
+        wizRenderGiorno();
+        alert('✅ Orari copiati su tutti i tecnici di questa giornata.');
+    }
+
+    // Sincronizza tutte le giornate → righe tabella A4
+    function wizSyncAllOrariA4() {
+        wizSalvaOrariTabCorrente();
+        // Pulisce la tabella A4 e ricostruisce: una riga per ogni (giornata × tecnico-presente)
+        document.getElementById('table-body').innerHTML = '';
+        rowCount = 0;
+        wizGiornate.forEach(g => {
+            const dataTab = g.data ? (d => `${d[2]}/${d[1]}/${d[0]}`)(g.data.split('-')) : '';
+            g.tecniciPresenti.forEach(nome => {
+                addRow();
+                const i = rowCount;
+                const o = g.orari[nome] || {};
+                if (document.getElementsByName(`d_${i}`)[0])   document.getElementsByName(`d_${i}`)[0].value   = dataTab;
+                if (document.getElementsByName(`tec_${i}`)[0]) document.getElementsByName(`tec_${i}`)[0].value = nome;
+                CAMPI_ORARI.forEach(f => {
+                    const el = document.getElementsByName(`${f}_${i}`)[0];
+                    if (el) el.value = o[f] || '';
+                });
+                ['p','c','h'].forEach(f => {
+                    const el = document.getElementsByName(`${f}_${i}`)[0];
+                    if (el) el.checked = !!o[f];
+                });
+            });
+        });
+        if (rowCount === 0) addRow(); // mantieni almeno una riga vuota
+        calc();
+    }
+
+    // ── STEP 4: DESCRIZIONE CON STRUTTURA FISSA ───────────────
+    function wizAggiornaTesto() {
+        const problema = (document.getElementById('w_problema')?.value || '').trim().toUpperCase();
+        const lavoro   = (document.getElementById('w_lavoro')?.value   || '').trim().toUpperCase();
+        const testo = [
+            problema ? 'PROBLEMA RISCONTRATO:\n' + problema : 'PROBLEMA RISCONTRATO:\n[NON SPECIFICATO]',
+            '',
+            '----------------------------------------',
+            'LAVORO ESEGUITO:',
+            lavoro || '',
+            '',
+            'MACCHINA LASCIATA AL CLIENTE IN FUNZIONE E IN CONDIZIONE DI SICUREZZA'
+        ].join('\n');
+        document.getElementById('descrizione_input').value = testo;
+        saveDraft();
+    }
+
+    function wizContaChar() {
+        const n = (document.getElementById('w_lavoro')?.value || '').trim().length;
+        const el = document.getElementById('w-char-bar');
+        if (!el) return;
+        el.textContent = n + ' caratteri' + (n < 10 ? ' — scrivi ancora un po\'' : n < 40 ? ' — quasi pronto' : ' ✓');
+        el.className = 'char-bar ' + (n < 10 ? 'warn' : 'ok');
+    }
+
+    // ── STEP 4c: ANTEPRIMA A4 ────────────────────────────────
+    function wizApriA4PerRevisione() {
+        wizSyncAllOrariA4();
+        wizAggiornaTesto();
+        setMode('a4');
+        // Mostra banner di ritorno al wizard
+        let banner = document.getElementById('wiz-ritorno-banner');
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'wiz-ritorno-banner';
+            banner.style.cssText = 'position:fixed; bottom:0; left:0; right:0; background:var(--tmc-blue); color:white; padding:14px 20px; display:flex; justify-content:space-between; align-items:center; z-index:9000; font-size:14px; font-weight:bold;';
+            banner.innerHTML = '<span>✅ Controllo completato?</span><button onclick="wizRitornaDopoRevisione()" style="background:white; color:var(--tmc-blue); border:none; border-radius:5px; padding:10px 18px; font-weight:bold; cursor:pointer; font-size:14px;">Torna al wizard →</button>';
+            document.body.appendChild(banner);
+        }
+        banner.style.display = 'flex';
+    }
+
+    function wizRitornaDopoRevisione() {
+        const banner = document.getElementById('wiz-ritorno-banner');
+        if (banner) banner.style.display = 'none';
+        setMode('wizard');
+        // Mostra sezione conferma nello step 4c
+        document.getElementById('ws4c-conferma').style.display = 'block';
+        document.getElementById('w_revisione_ok').checked = false;
+    }
+
+    function wizCheckRevisione() {
+        // niente da fare, la validazione avviene al goNext
+    }
+
+
+
+    // ── MATERIALI ──────────────────────────────────────────────
+    // Flag per avviso non bloccante step 4b
+    let wizCur4bAvvisato = false;
+
+    function wizVal4b() {
+        // Non blocca più: restituisce sempre true
+        // La sincronizzazione avviene in wizGoNext
+        document.getElementById('werr4b').style.display = 'none';
+        return true;
+    }
+
+    function matBuildLista(materiali) {
+        matDaCalendario = materiali;
+        const container = document.getElementById('mat-lista-calendario');
+        container.innerHTML = '';
+        if (!materiali || materiali.length === 0) {
+            container.innerHTML = '<p style="font-size:13px; color:#888; text-align:center; padding:1rem 0;">Nessun materiale trovato nel calendario per questo intervento.</p>';
+            return;
+        }
+        materiali.forEach((mat, idx) => {
+            const div = document.createElement('div');
+            div.className = 'mat-item';
+            div.innerHTML = `
+                <input type="checkbox" class="mat-check" id="mat-cb-${idx}"
+                    onchange="matToggle(${idx}, this.checked)">
+                <label for="mat-cb-${idx}" class="mat-testo" id="mat-lbl-${idx}">${mat.testo}</label>
+                <input type="number" class="mat-qta" id="mat-qta-${idx}"
+                    value="${mat.qtaSuggerita}" min="1" disabled
+                    onchange="matSyncA4()">
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    function matToggle(idx, checked) {
+        const lbl = document.getElementById('mat-lbl-' + idx);
+        const qta = document.getElementById('mat-qta-' + idx);
+        if (lbl) lbl.className = 'mat-testo' + (checked ? ' usato' : '');
+        if (qta) qta.disabled = !checked;
+        matSyncA4();
+    }
+
+    function matAggiungiExtra() {
+        const testo = document.getElementById('mat-nuovo-testo').value.trim().toUpperCase();
+        const qta   = parseInt(document.getElementById('mat-nuovo-qta').value) || 1;
+        if (!testo) { document.getElementById('mat-nuovo-testo').focus(); return; }
+        matExtra.push({ testo, qta });
+        document.getElementById('mat-nuovo-testo').value = '';
+        document.getElementById('mat-nuovo-qta').value  = '1';
+        matRenderExtra();
+        matSyncA4();
+    }
+
+    function matRenderExtra() {
+        const container = document.getElementById('mat-extra-list');
+        container.innerHTML = '';
+        matExtra.forEach((m, idx) => {
+            const div = document.createElement('div');
+            div.className = 'mat-extra-item';
+            div.innerHTML = `
+                <input type="number" value="${m.qta}" min="1" style="width:54px; padding:6px 4px; border:1px solid #cce0f5; border-radius:5px; font-size:15px; font-weight:bold; color:var(--tmc-blue); text-align:center; background:white;"
+                    onchange="matExtra[${idx}].qta=parseInt(this.value)||1; matSyncA4();">
+                <input type="text" class="mat-extra-testo" value="${m.testo}"
+                    onchange="matExtra[${idx}].testo=this.value.toUpperCase(); matSyncA4();">
+                <button class="mat-extra-del" onclick="matRimuoviExtra(${idx})">×</button>
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    function matRimuoviExtra(idx) {
+        matExtra.splice(idx, 1);
+        matRenderExtra();
+        matSyncA4();
+    }
+
+    // Sincronizza materiali selezionati → tabella ricambi A4
+    function matSyncA4() {
+        // Svuota tutte le righe ricambi esistenti
+        document.getElementById('ricambi-body').innerHTML = '';
+        ricCount = 0;
+
+        // 1. Materiali dal calendario flaggati
+        matDaCalendario.forEach((mat, idx) => {
+            const cb  = document.getElementById('mat-cb-' + idx);
+            const qtaEl = document.getElementById('mat-qta-' + idx);
+            if (cb && cb.checked) {
+                addRicambioConDati('', mat.testo, qtaEl ? qtaEl.value : 1, '', '');
+            }
+        });
+
+        // 2. Materiali extra
+        matExtra.forEach(m => {
+            addRicambioConDati('', m.testo, m.qta, '', '');
+        });
+
+        calc();
+    }
+
+    // Aggiunge una riga ricambio già precompilata nella tabella A4
+    function addRicambioConDati(codice, descrizione, qta, unitPrice, totale) {
+        ricCount++;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><input type="text" class="save-data caps" name="rc_${ricCount}" value="${codice}"></td>
+            <td><input type="text" class="save-data caps" name="rd_${ricCount}" value="${descrizione.toUpperCase()}"></td>
+            <td><input type="number" class="save-data qta" name="rq_${ricCount}" value="${qta}"></td>
+            <td><input type="text" class="save-data unit" name="ru_${ricCount}" value="${unitPrice}"></td>
+            <td><input type="text" class="save-data tot-riga" name="rt_${ricCount}" value="${totale}"></td>
+        `;
+        document.getElementById('ricambi-body').appendChild(tr);
+        attachListeners();
+    }
+
+    // ── FINE MATERIALI ─────────────────────────────────────────
+
+    function wizToggleTec(btn) {
+        btn.classList.toggle('sel');
+        wizSyncTecnici();
+    }
+
+    // Tecnici extra (non in lista) — array di nomi stringa
+    let wizTecExtra = [];
+
+    function wizAgiungiTecExtra() {
+        const input = document.getElementById('wiz-tec-extra-input');
+        const nome = input.value.trim().toUpperCase();
+        if (!nome || wizTecExtra.includes(nome)) { input.focus(); return; }
+        wizTecExtra.push(nome);
+        input.value = '';
+        wizRenderTecExtra();
+        wizSyncTecnici();
+    }
+
+    function wizAgiungiTecNomeEsterno(nome) {
+        if (!wizTecExtra.includes(nome)) {
+            wizTecExtra.push(nome);
+            wizRenderTecExtra();
+        }
+        wizSyncTecnici();
+    }
+
+    function wizRimuoviTecExtra(nome) {
+        wizTecExtra = wizTecExtra.filter(n => n !== nome);
+        wizRenderTecExtra();
+        wizSyncTecnici();
+    }
+
+    function wizRenderTecExtra() {
+        const container = document.getElementById('wiz-tec-extra-list');
+        container.innerHTML = '';
+        wizTecExtra.forEach(nome => {
+            const div = document.createElement('div');
+            div.style.cssText = 'display:flex; align-items:center; justify-content:space-between; background:#e6f1fb; border:1px solid var(--tmc-blue); border-radius:5px; padding:8px 12px; margin-top:5px;';
+            div.innerHTML = `<span style="font-size:13px; font-weight:bold; color:var(--tmc-blue);">👤 ${nome}</span><button onclick="wizRimuoviTecExtra('${nome}')" style="background:#ff4444; color:white; border:none; border-radius:4px; padding:4px 10px; font-weight:bold; cursor:pointer; font-size:12px;">X</button>`;
+            container.appendChild(div);
+        });
+    }
+
+    function wizGetTuttiTecnici() {
+        const daGriglia = [...document.querySelectorAll('#wiz-tec-grid .tec-btn.sel')].map(b => b.textContent.trim());
+        return [...daGriglia, ...wizTecExtra];
+    }
+
+    function wizSyncTecnici() {
+        const tutti = wizGetTuttiTecnici();
+        if (tutti.length > 0) {
+            const t1Input = document.getElementsByName('tecnico_1')[0];
+            if (t1Input) t1Input.value = tutti[0];
+            const container = document.getElementById('lista-tecnici-inputs');
+            while (container.children.length > 1) container.removeChild(container.lastChild);
+            for (let i = 1; i < tutti.length; i++) aggiungiRigaTecnico(tutti[i], false);
+            if (document.getElementsByName('tec_1')[0]) document.getElementsByName('tec_1')[0].value = tutti[0];
+        }
+        // Aggiungi i nuovi tecnici come "presenti" nella prima giornata (se esiste e ancora vuota)
+        if (wizGiornate.length > 0) {
+            tutti.forEach(n => {
+                if (!wizGiornate[0].tecniciPresenti.includes(n)) wizGiornate[0].tecniciPresenti.push(n);
+            });
+        }
+        saveDraft();
+    }
+
+    // Sincronizza campo singolo A4 ↔ wizard
+    function sincronizzaCampo(idA4, val) {
+        const el = document.getElementById(idA4);
+        if (el) el.value = val;
+        saveDraft();
+    }
+    function sincronizzaCampoSelect(nameA4, val) {
+        const el = document.querySelector(`[name="${nameA4}"]`);
+        if (el) el.value = val;
+        saveDraft();
+    }
+
+    // Orari wizard → tabella A4
+    function wizPopolaRiepilogo() {
+        const ticket  = document.getElementById('w_ticket').value  || '—';
+        const cliente = document.getElementById('w_cliente').value || '—';
+        const lavoro  = (document.getElementById('w_lavoro')?.value || '').trim();
+        const tecnici = wizGetTuttiTecnici().join(', ') || '—';
+        document.getElementById('wr_ticket').textContent  = ticket;
+        document.getElementById('wr_cliente').textContent = cliente;
+        document.getElementById('wr_tecnici').textContent = tecnici;
+        document.getElementById('wr_desc').textContent    = lavoro.length > 130 ? lavoro.slice(0,130)+'…' : (lavoro || '—');
+        // Riepilogo giornate
+        let dataRecap = '—';
+        if (wizGiornate.length === 1 && wizGiornate[0].data) {
+            dataRecap = new Date(wizGiornate[0].data + 'T12:00').toLocaleDateString('it-IT', {weekday:'long', day:'2-digit', month:'long', year:'numeric'});
+        } else if (wizGiornate.length > 1) {
+            const date = wizGiornate.map(g => g.data ? new Date(g.data+'T12:00').toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit'}) : '?');
+            dataRecap = `${wizGiornate.length} giornate (${date.join(', ')})`;
+        }
+        document.getElementById('wr_data').textContent = dataRecap;
+        ['wr_ticket','wr_cliente','wr_tecnici'].forEach(id => {
+            const el = document.getElementById(id);
+            el.className = 'rv' + (el.textContent === '—' ? ' miss' : '');
+        });
+        // Materiali
+        const righeMatCal = [...document.querySelectorAll('.mat-check')].filter(cb=>cb.checked).map(cb=>{
+            const idx=cb.id.replace('mat-cb-','');
+            return `${document.getElementById('mat-qta-'+idx)?.value||1}× ${document.getElementById('mat-lbl-'+idx)?.textContent||''}`;
+        });
+        const tuttiMat = [...righeMatCal, ...matExtra.map(m=>`${m.qta}× ${m.testo}`)];
+        const matRow = document.getElementById('wr_mat_row');
+        const matEl  = document.getElementById('wr_mat');
+        if (tuttiMat.length > 0) { matEl.textContent=tuttiMat.join('\n'); matRow.style.display='block'; }
+        else matRow.style.display='none';
+        // Firma
+        const sig = localStorage.getItem('tmc_sig');
+        const sigBox = document.getElementById('wiz-sigbox');
+        if (sig) {
+            sigBox.className='sig-area signed';
+            sigBox.innerHTML='<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 24 Q10 14 16 20 Q22 26 28 8"/><line x1="4" y1="28" x2="28" y2="28"/></svg><span>Firma acquisita ✓</span>';
+        }
+    }
+
+    async function wizSync() {
+        if (s1Modalita === 'tecnico') {
+            if (!s1TecnicoSelezionato) { alert('Seleziona prima il tuo nome dalla lista!'); return; }
+            document.getElementsByName('tecnico_1')[0].value = s1TecnicoSelezionato;
+            await importaDaCalendario('tecnico');
+        } else {
+            const tck = document.getElementById('w_ticket').value.trim();
+            if (!tck) { alert('Inserisci prima il numero di ticket!'); return; }
+            document.getElementById('n_rapporto_input').value = tck;
+            await importaDaCalendario('ticket');
+        }
+    }
+
+    // ── EMAIL CHECK ───────────────────────────────────────────
+    function wizCheckEmail() {
+        const em = document.getElementById('w_email').value.trim();
+        const avviso = document.getElementById('w_email_avviso');
+        const ok     = document.getElementById('w_email_ok');
+        const valida = em && em.includes('@') && em.includes('.');
+        avviso.style.display = (!em) ? 'block' : 'none';
+        ok.style.display     = valida ? 'block' : 'none';
+    }
+
+    // ── OVERLAY ESITO EMAIL ───────────────────────────────────
+    function mostraEsitoEmail(successo, dettaglio, destinatari) {
+        const ov = document.getElementById('email-result-overlay');
+        document.getElementById('er-icon').textContent     = successo ? '✅' : '❌';
+        document.getElementById('er-titolo').textContent   = successo ? 'Email inviata con successo!' : 'Errore nell\'invio';
+        document.getElementById('er-titolo').style.color   = successo ? '#3B6D11' : '#A32D2D';
+        document.getElementById('er-dettaglio').textContent = dettaglio;
+        const destEl = document.getElementById('er-destinatari');
+        if (successo && destinatari) {
+            destEl.innerHTML = '<b>Inviata a:</b><br>' + destinatari.split(',').map(d => `📧 ${d.trim()}`).join('<br>');
+            destEl.style.display = 'block';
+        } else {
+            destEl.style.display = 'none';
+        }
+        document.getElementById('er-btn-ok').style.background = successo ? '#3B6D11' : 'var(--tmc-blue)';
+        ov.style.display = 'flex';
+    }
+
+    function chiudiEsitoEmail() {
+        document.getElementById('email-result-overlay').style.display = 'none';
+    }
+
+    function wizInvia() {
+        if (!localStorage.getItem('tmc_sig')) { document.getElementById('werr5').style.display = 'block'; return; }
+        document.getElementById('werr5').style.display = 'none';
+        // Avvisa se manca email ma lascia procedere
+        const em = document.getElementById('w_email').value.trim();
+        if (!em || !em.includes('@')) {
+            if (!confirm('⚠️ Nessuna email cliente inserita.\n\nIl rapporto verrà inviato SOLO all\'ufficio TMC.\n\nVuoi procedere comunque?')) return;
+        }
+        wizSyncTecnici();
+        wizSyncAllOrariA4();
+        sincronizzaCampo('email_input', em);
+        generaIdUnivoco();
+        inviaEmailAutomaticamente();
+    }
+
+    function wizWhatsapp() {
+        if (!localStorage.getItem('tmc_sig')) { document.getElementById('werr5').style.display = 'block'; return; }
+        document.getElementById('werr5').style.display = 'none';
+        wizSyncTecnici();
+        wizSyncAllOrariA4();
+        generaIdUnivoco();
+        condividiWhatsApp();
+    }
+
+    // ═══════════════════════════════════════════════
+    // TUTTE LE FUNZIONI ORIGINALI (invariate)
+    // ═══════════════════════════════════════════════
+    async function verificaLogin() {
+        if(!navigator.onLine) return alert("Sei offline. Attiva la connessione per il primo login.");
+        const input = document.getElementById('pin_input').value.toUpperCase().trim();
+        const btn = document.getElementById('btn-login');
+        if(!input) return;
+        btn.innerText = "VERIFICA IN CORSO...";
+        document.getElementById('login-error').style.display = 'none';
+        try {
+            const response = await fetch(APP_SCRIPT_URL, {
+                method: "POST", headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action: "check_pin", pin: input })
+            });
+            const data = await response.json();
+            if(data.success) {
+                localStorage.setItem('tmc_auth_token', input);
+                // Controlla se l'email tecnico è già stata impostata
+                const emailTec = localStorage.getItem('tmc_email_tecnico');
+                if (emailTec === null) {
+                    // Prima volta: mostra overlay raccolta email
+                    document.getElementById('login-overlay').style.display = 'none';
+                    document.getElementById('email-tecnico-overlay').style.display = 'flex';
+                    setTimeout(() => document.getElementById('email_tecnico_input').focus(), 200);
+                } else {
+                    sbloccaApp();
+                }
+            } else {
+                document.getElementById('login-error').style.display = 'block';
+            }
+        } catch(e) { alert("Errore di connessione. Riprova."); }
+        finally { btn.innerText = "ACCEDI"; }
+    }
+
+    function modificaEmailTecnico() {
+        const attuale = localStorage.getItem('tmc_email_tecnico') || '';
+        const nuova = prompt('La tua email personale per le conferme di invio:\n(lascia vuoto per non ricevere conferme)', attuale);
+        if (nuova === null) return; // annullato
+        const em = nuova.trim().toLowerCase();
+        if (em && (!em.includes('@') || !em.includes('.'))) {
+            alert('Email non valida. Riprova.');
+            return;
+        }
+        localStorage.setItem('tmc_email_tecnico', em);
+        alert(em ? '✅ Email salvata: ' + em : 'Email rimossa. Non riceverai più conferme di invio.');
+    }
+
+    function salvaEmailTecnico() {
+        const em = document.getElementById('email_tecnico_input').value.trim().toLowerCase();
+        const err = document.getElementById('email-tecnico-err');
+        if (!em || !em.includes('@') || !em.includes('.')) {
+            err.style.display = 'block'; return;
+        }
+        err.style.display = 'none';
+        localStorage.setItem('tmc_email_tecnico', em);
+        document.getElementById('email-tecnico-overlay').style.display = 'none';
+        sbloccaApp();
+    }
+
+    function saltaEmailTecnico() {
+        // Salva stringa vuota per non chiedere di nuovo
+        localStorage.setItem('tmc_email_tecnico', '');
+        document.getElementById('email-tecnico-overlay').style.display = 'none';
+        sbloccaApp();
+    }
+
+    function esciApp(chiediConferma = true) {
+        if(!chiediConferma || confirm("Vuoi rimuovere l'autorizzazione?")) {
+            localStorage.removeItem('tmc_auth_token');
+            // NON rimuovere tmc_email_tecnico: rimane salvata per il prossimo accesso
+            location.reload();
+        }
+    }
+
+    function sbloccaApp() {
+        document.getElementById('login-overlay').style.display = 'none';
+        document.getElementById('email-tecnico-overlay').style.display = 'none';
+        document.getElementById('app-content').style.display = 'block';
+        const savedMode = localStorage.getItem('tmc_mode') || 'wizard';
+        setMode(savedMode);
+        loadDraft();
+    }
+    function validaCampiObbligatori() {
+        let ticket = document.getElementById('n_rapporto_input').value.trim();
+        let cliente = document.getElementById('cliente_input').value.trim();
+        let oreLavoroText = document.getElementById('tot_lavoro_span').innerText.trim();
+        let errori = [];
+        if (!ticket || ticket === "TCK-") errori.push("• RAPPORTO INTERVENTO N.");
+        if (!cliente) errori.push("• NOME CLIENTE");
+        if (oreLavoroText === "") errori.push("• ORE DI LAVORO (Compilare almeno un orario di Lavoro)");
+        if (errori.length > 0) { alert("⚠️ ATTENZIONE:\n\n" + errori.join("\n")); return false; }
+        return true;
+    }
+    function salvaPDF() { if (!validaCampiObbligatori()) return; window.print(); }
+    async function salvaBozzaAttuale() { const ticket = document.getElementById('n_rapporto_input').value; const tecnico = document.getElementsByName('tecnico_1')[0].value || "Nessun Tecnico"; if (!ticket || ticket === "TCK-") { alert("⚠️ Inserisci almeno il numero di rapporto."); return; } const dataInputs = {}; document.querySelectorAll('.save-data').forEach(el => dataInputs[el.name] = (el.type==='checkbox' ? el.checked : el.value)); const payload = { inputs: dataInputs, counts: {r: rowCount, ric: ricCount}, sig: localStorage.getItem('tmc_sig') }; let bozzeLocali = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]'); bozzeLocali = bozzeLocali.filter(b => b.tck !== ticket); bozzeLocali.push({ tck: ticket, tecnico: tecnico, payload: payload, data: Date.now() }); localStorage.setItem('tmc_bozze_locali', JSON.stringify(bozzeLocali)); if (navigator.onLine) { document.getElementById('loading-overlay').style.display = 'flex'; document.getElementById('loading-text').innerText = "Sincronizzazione Cloud..."; try { const res = await fetch(APP_SCRIPT_URL, { method: "POST", headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: "save_cloud", tck: ticket, tecnico: tecnico, content: payload, pin: localStorage.getItem('tmc_auth_token') }) }); const out = await res.json(); if (out.success) { bozzeLocali = bozzeLocali.filter(b => b.tck !== ticket); localStorage.setItem('tmc_bozze_locali', JSON.stringify(bozzeLocali)); alert("✅ Salvato e sincronizzato."); } } catch(e) { alert("⚠️ Connessione debole. Salvato solo sul telefono."); } finally { document.getElementById('loading-overlay').style.display = 'none'; } } else { alert("📵 Offline. Salvato sul telefono."); } if(document.getElementById('drafts-overlay').style.display === 'flex') { apriBozze(); } }
+    async function apriBozze() { document.getElementById('drafts-overlay').style.display = 'flex'; aggiornaListaBozzeLocali(); const cloudContainer = document.getElementById('lista-bozze-cloud'); if (!navigator.onLine) { cloudContainer.innerHTML = "<p style='font-size:12px; color:red;'>📵 Offline.</p>"; return; } cloudContainer.innerHTML = "<p>Download dal Cloud... ⏳</p>"; try { const res = await fetch(APP_SCRIPT_URL, { method: "POST", headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: "get_bozze", pin: localStorage.getItem('tmc_auth_token') }) }); const data = await res.json(); if (data.success) aggiornaListaBozzeCloud(data.bozze); else cloudContainer.innerHTML = "<p style='color:red;'>Errore.</p>"; } catch(e) { cloudContainer.innerHTML = "<p style='color:red;'>Errore rete.</p>"; } }
+    function aggiornaListaBozzeLocali() { const container = document.getElementById('lista-bozze-locali'); const bozzeLocali = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]'); container.innerHTML = ""; if(bozzeLocali.length === 0) { container.innerHTML = "<p style='font-size:11px; color:#666;'>Nessuna bozza locale.</p>"; return; } bozzeLocali.forEach(b => { const div = document.createElement('div'); div.className = "draft-item"; let df = new Date(b.data).toLocaleString('it-IT', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); div.innerHTML = `<div style="flex:1;"><strong style="font-size:12px; color:#e65100;">${b.tck}</strong><br><span style="font-size:9px;">${b.tecnico} - ${df}</span></div><div style="display:flex; gap:4px;"><button onclick="caricaBozzaLocale('${b.tck}')" style="background:#25D366; padding:6px; font-size:10px; color:white; border:none; border-radius:3px;">APRI</button><button onclick="sincronizzaManualmente('${b.tck}')" style="background:var(--tmc-blue); padding:6px; font-size:10px; color:white; border:none; border-radius:3px;">☁️</button><button onclick="eliminaBozzaLocale('${b.tck}')" style="background:#ff4444; padding:6px; font-size:10px; color:white; border:none; border-radius:3px;">X</button></div>`; container.appendChild(div); }); }
+    function aggiornaListaBozzeCloud(bozze) { const container = document.getElementById('lista-bozze-cloud'); container.innerHTML = ""; if(!bozze || bozze.length === 0) { container.innerHTML = "<p style='font-size:11px; color:#666;'>Nessuna bozza nel Cloud.</p>"; return; } window.bozzeCloud = bozze; bozze.forEach((b, index) => { const div = document.createElement('div'); div.className = "draft-item"; let df = new Date(b.data).toLocaleString('it-IT', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); div.innerHTML = `<div style="flex:1;"><strong style="font-size:12px; color:#1565c0;">${b.tck}</strong><br><span style="font-size:9px;">${b.tecnico} - ${df}</span></div><div style="display:flex; gap:4px;"><button onclick="caricaBozzaCloud(${index})" style="background:#25D366; padding:6px; font-size:10px; color:white; border:none; border-radius:3px;">APRI</button><button onclick="eliminaBozzaCloudUI('${b.tck}')" style="background:#ff4444; padding:6px; font-size:10px; color:white; border:none; border-radius:3px;">X</button></div>`; container.appendChild(div); }); }
+    function caricaBozzaLocale(tck) { if(!confirm("Caricare questa bozza?")) return; const b = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').find(b => b.tck === tck); if(b) applicaDatiBozza(b.payload); }
+    function caricaBozzaCloud(index) { if(!confirm("Caricare questa bozza dal Cloud?")) return; const b = window.bozzeCloud[index]; if(b) applicaDatiBozza(JSON.parse(b.dati)); }
+    function applicaDatiBozza(jsonData) { try { localStorage.setItem('tmc_bozza', JSON.stringify(jsonData.inputs || {})); localStorage.setItem('tmc_counts', JSON.stringify(jsonData.counts || {r:1, ric:1})); if (jsonData.sig) localStorage.setItem('tmc_sig', jsonData.sig); else localStorage.removeItem('tmc_sig'); document.getElementById('drafts-overlay').style.display = 'none'; loadDraft(); } catch(e) { alert("Errore lettura bozza."); } }
+    function eliminaBozzaLocale(tck) { if(!confirm("Cancellare questa bozza?")) return; let b = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').filter(x => x.tck !== tck); localStorage.setItem('tmc_bozze_locali', JSON.stringify(b)); aggiornaListaBozzeLocali(); }
+    async function eliminaBozzaCloudUI(tck) { if(!navigator.onLine) return alert("Offline!"); if(!confirm("Eliminare dal Cloud?")) return; document.getElementById('lista-bozze-cloud').innerHTML = "<p>Eliminazione... ⏳</p>"; try { await fetch(APP_SCRIPT_URL, { method: "POST", headers: {'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({ action:"delete_cloud", tck, pin:localStorage.getItem('tmc_auth_token') }) }); apriBozze(); } catch(e) { alert("Errore rete"); } }
+    async function sincronizzaManualmente(tck) { if(!navigator.onLine) return alert("Offline!"); const b = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').find(x => x.tck === tck); if(!b) return; document.getElementById('loading-overlay').style.display = 'flex'; document.getElementById('loading-text').innerText = "Invio al Cloud..."; try { const res = await fetch(APP_SCRIPT_URL, { method:"POST", headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({ action:"save_cloud", tck:b.tck, tecnico:b.tecnico, content:b.payload, pin:localStorage.getItem('tmc_auth_token') }) }); const out = await res.json(); if(out.success) { let ag = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').filter(x => x.tck !== tck); localStorage.setItem('tmc_bozze_locali', JSON.stringify(ag)); apriBozze(); alert("✅ Sincronizzato!"); } } catch(e) { alert("Errore."); } finally { document.getElementById('loading-overlay').style.display = 'none'; } }
+    function inserisciSeparatoreTesto(elementId) { const el = document.getElementById(elementId); let text = el.value; if (text && !text.endsWith('\n')) text += '\n'; text += '\n----------------------------------------\nLAVORO ESEGUITO:\n\n\nMACCHINA LASCIATA AL CLIENTE IN FUNZIONE E IN CONDIZIONE DI SICUREZZA\n'; el.value = text; el.focus(); if(elementId === 'descrizione_input') saveDraft(); }
+    function apriEditorTesto() { const ta = document.getElementById('descrizione_input'); document.getElementById('editor_fullscreen').value = ta.value; document.getElementById('text-editor-overlay').style.display = 'flex'; setTimeout(() => document.getElementById('editor_fullscreen').focus(), 100); }
+    function chiudiEditorTesto(salva) { if(salva) { const v = document.getElementById('editor_fullscreen').value; document.getElementById('descrizione_input').value = v; if(document.getElementById('w_desc')) { document.getElementById('w_desc').value = v; wizContaChar(); } saveDraft(); } document.getElementById('text-editor-overlay').style.display = 'none'; }
+    function apriEditorEmail() { document.getElementById('modal_email_input').value = document.getElementById('email_input').value; document.getElementById('email-editor-overlay').style.display = 'flex'; setTimeout(() => document.getElementById('modal_email_input').focus(), 100); }
+    function chiudiEditorEmail(salva) { if(salva) { const em = document.getElementById('modal_email_input').value.trim(); document.getElementById('email_input').value = em; if(document.getElementById('w_email')) document.getElementById('w_email').value = em; if(em.includes('@')) { const est = em.split('@')[0].replace(/\./g,' ').toUpperCase(); document.getElementsByName('nome_responsabile')[0].value = est; } saveDraft(); } document.getElementById('email-editor-overlay').style.display = 'none'; }
+    let rowCount = 0; let ricCount = 0;
+    const canvas = document.getElementById('canvas-fullscreen');
+    const ctx = canvas.getContext('2d');
+    let drawing = false;
+    function getTimeOptions(includiRit = false) { let opt = '<option value="">--</option>'; if(includiRit) opt += `<option value="${RIT_LABEL}">${RIT_LABEL}</option>`; for(let h=5; h<=22; h++) { let hh = h<10?'0'+h:h; ['00','30'].forEach(mm => { if(!(h==22&&mm=='30')) opt += `<option value="${hh}:${mm}">${hh}:${mm}</option>`; }); } return opt; }
+    function aggiornaVrSelect() { const vr2 = document.getElementById('modal_vr2'); const cur = vr2.value; vr2.innerHTML = getTimeOptions(true); if(cur) vr2.value = cur; }
+    function aggiungiRigaTecnico(valore = "", aggiungiRigaTabella = true) { const container = document.getElementById('lista-tecnici-inputs'); const idx = container.querySelectorAll('.tecnico-riga').length + 1; const div = document.createElement('div'); div.className = "tecnico-riga"; div.style.cssText = "display:flex; gap:5px; margin-top:5px;"; div.innerHTML = `<div class="tecnico-combo" style="flex:1;"><input type="text" name="tecnico_${idx}" class="save-data tecnico-input-main caps" value="${valore.toUpperCase()}"><select class="tecnico-select-bg" onchange="this.previousElementSibling.value=this.value; saveDraft();"><option value=""></option><option>CARINI MARCO</option><option>LIVIU CIORICI</option><option>MARIN CIORESCU</option><option>ATTILIO MASERATI</option><option>POLLEDRI RICCARDO</option><option>GAZZOLA MASSIMO</option><option>BRAGHIERI STEFANO</option><option>COROLI LORENZO</option><option>CREMONESI NICOLA</option><option>MARLIERI GIUSEPPE</option><option>MARZAROLI EMILIO</option><option>PICCOLI GIULIANO</option><option>IVAN ISOPESCU</option><option>MAZZOCCHI MIRCO</option><option>MOIA LUIGI</option><option>RIMONDI MARCO</option></select></div><button type="button" class="no-print" onclick="this.parentElement.remove(); saveDraft();" style="background:#ff4444; color:white; border:none; border-radius:3px; padding:0 8px; font-weight:bold; cursor:pointer;">X</button>`; container.appendChild(div); if(aggiungiRigaTabella) { addRow(); if(valore && document.getElementsByName(`tec_${rowCount}`)[0]) document.getElementsByName(`tec_${rowCount}`)[0].value = valore.toUpperCase(); } attachListeners(); }
+    function generaIdUnivoco() { let idInput = document.getElementById('id_univoco_input'); if(!idInput.value) { const now = new Date(); const yy=String(now.getFullYear()).slice(-2), mm=String(now.getMonth()+1).padStart(2,'0'), dd=String(now.getDate()).padStart(2,'0'), hh=String(now.getHours()).padStart(2,'0'), min=String(now.getMinutes()).padStart(2,'0'); const tck=document.getElementById('n_rapporto_input').value||"M"; idInput.value=`${tck}-${yy}${mm}${dd}-${hh}${min}`; saveDraft(); } }
+    function controllaFirma() { if(!localStorage.getItem('tmc_sig')) { alert("⚠️ Manca la firma del cliente!"); return false; } return true; }
+    async function importaDaCalendario(mode = 'tecnico') {
+        if(!navigator.onLine) return alert("Connettiti per interrogare il calendario!");
+        const pin = localStorage.getItem('tmc_auth_token');
+        const body = { action: "get_calendar", pin };
+        if(mode === 'tecnico') { const t1 = document.getElementsByName('tecnico_1')[0].value; if(!t1) return alert("Inserisci un tecnico!"); body.tecnico = t1; }
+        else if(mode === 'ticket') { const tck = document.getElementById('n_rapporto_input').value; if(!tck) return alert("Scrivi un numero di ticket!"); body.ticket = tck; }
+        document.getElementById('loading-overlay').style.display = 'flex';
+        document.getElementById('loading-text').innerText = "Ricerca in corso...";
+        try { const response = await fetch(APP_SCRIPT_URL, { method:"POST", headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(body) }); const data = await response.json(); document.getElementById('loading-overlay').style.display = 'none'; if(data.results && data.results.length > 0) { if(data.results.length === 1) applicaDatiCalendario(data.results[0]); else mostraSelezioneTicket(data.results); } else { alert(mode==='tecnico' ? "Nessun evento OGGI per questo tecnico." : "Nessun evento per questo Ticket."); } } catch(e) { document.getElementById('loading-overlay').style.display = 'none'; alert("Errore connessione."); }
+    }
+    function mostraSelezioneTicket(results) { const container = document.getElementById('lista-ticket-trovati'); container.innerHTML = ""; results.forEach(res => { const btn = document.createElement('button'); btn.className='ticket-btn'; btn.innerHTML=`<b>${res.tck||'Senza TCK'}</b> - ${res.cliente||'Senza Cliente'}<br><span style="font-size:10px; color:#666;">${res.problema||''}</span>`; btn.onclick=() => { document.getElementById('select-ticket-overlay').style.display='none'; applicaDatiCalendario(res); }; container.appendChild(btn); }); document.getElementById('select-ticket-overlay').style.display='flex'; }
+    function applicaDatiCalendario(data) {
+        document.getElementById('n_rapporto_input').value  = data.tck || "";
+        document.getElementById('macchina_input').value    = (data.matricola || "").toUpperCase();
+        document.getElementById('cliente_input').value     = (data.cliente   || "").toUpperCase();
+        document.getElementById('indirizzo_input').value   = (data.indirizzo || "").toUpperCase();
+        document.getElementById('email_input').value       = data.email ? data.email.toLowerCase() : "";
+        const resp = document.getElementsByName('nome_responsabile')[0];
+        if(data.contatto) resp.value = data.contatto.toUpperCase();
+        else if(data.email) resp.value = data.email.split('@')[0].replace(/\./g,' ').toUpperCase();
+        const container = document.getElementById('lista-tecnici-inputs');
+        while(container.children.length > 1) container.removeChild(container.lastChild);
+        if(data.tecnici && data.tecnici.length > 0) {
+            document.getElementsByName('tecnico_1')[0].value = data.tecnici[0].toUpperCase();
+            if(document.getElementsByName('tec_1')[0]) document.getElementsByName('tec_1')[0].value = data.tecnici[0].toUpperCase();
+            for(let i=1; i<data.tecnici.length; i++) aggiungiRigaTecnico(data.tecnici[i].toUpperCase(), true);
+            document.querySelectorAll('#wiz-tec-grid .tec-btn').forEach(btn => {
+                btn.classList.toggle('sel', data.tecnici.map(t=>t.toUpperCase()).includes(btn.textContent.trim()));
+            });
+            // Aggiorna anche i tecnici presenti nella prima giornata se esiste
+            if (wizGiornate.length > 0) {
+                wizGiornate[0].tecniciPresenti = [...wizGetTuttiTecnici()];
+            }
+        }
+        // Sincronizza campi wizard base
+        if(document.getElementById('w_ticket'))   document.getElementById('w_ticket').value   = data.tck || "";
+        if(document.getElementById('w_cliente'))   document.getElementById('w_cliente').value   = (data.cliente||"").toUpperCase();
+        if(document.getElementById('w_indirizzo')) document.getElementById('w_indirizzo').value = (data.indirizzo||"").toUpperCase();
+        if(document.getElementById('w_matricola')) document.getElementById('w_matricola').value = (data.matricola||"").toUpperCase();
+        if(document.getElementById('w_email') && data.email) document.getElementById('w_email').value = data.email.toLowerCase();
+
+        // Precompila PROBLEMA RISCONTRATO dal calendario (step 4)
+        const problema = (data.problema || '').toUpperCase();
+        if(document.getElementById('w_problema')) document.getElementById('w_problema').value = problema;
+        // Svuota LAVORO ESEGUITO — lo deve compilare il tecnico
+        if(document.getElementById('w_lavoro')) document.getElementById('w_lavoro').value = '';
+        wizContaChar();
+        // Aggiorna il testo unificato nel campo A4
+        wizAggiornaTesto();
+
+        // Reset revisione A4 (nuovo dato importato → va ricontrollato)
+        const okCb = document.getElementById('w_revisione_ok');
+        if (okCb) okCb.checked = false;
+        const conf = document.getElementById('ws4c-conferma');
+        if (conf) conf.style.display = 'none';
+
+        // ── MATERIALI ──────────────────────────────────────────
+        const hasMat = data.materiali && data.materiali.length > 0;
+        wizAggiornaStepper(hasMat);
+        matExtra = [];
+        if (hasMat) {
+            matBuildLista(data.materiali);
+        } else {
+            matDaCalendario = [];
+            const c = document.getElementById('mat-lista-calendario');
+            if (c) c.innerHTML = '';
+            const el = document.getElementById('mat-extra-list');
+            if (el) el.innerHTML = '';
+        }
+
+        document.getElementById('id_univoco_input').value = "";
+        generaIdUnivoco(); saveDraft();
+    }
+    function preparaSchermoPerPDF() { window.scrollTo(0,0); document.getElementById('viewport-meta').setAttribute('content','width=1024'); document.body.classList.add('pdf-mode'); const ta=document.getElementById('descrizione_input'); const tp=document.getElementById('descrizione_print'); tp.innerText=ta.value; ta.style.display='none'; tp.style.display='block'; }
+    function ripristinaSchermo() { document.getElementById('viewport-meta').setAttribute('content','width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'); document.body.classList.remove('pdf-mode'); document.getElementById('descrizione_input').style.display='block'; document.getElementById('descrizione_print').style.display='none'; }
+    function getPdfOptions(fileName) { return { margin:[1,0,2,0], filename:fileName, image:{type:'jpeg',quality:0.98}, html2canvas:{scale:2,useCORS:true,scrollY:0}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}, pagebreak:{mode:['css','legacy'],avoid:['tr','.card','.bottom-grid','.main-title-container']} }; }
+    function generaRiepilogoCalendario(idUnivoco) { let r=`\n\n--- RAPPORTO INVIATO (${idUnivoco}) ---\n`; let lav=document.getElementById('tot_lavoro_span')?.innerText||""; if(lav) r+=`Ore: ${lav}\n`; let totP=0,totC=0,totH=0; for(let i=1;i<=rowCount;i++){ if(document.getElementsByName(`p_${i}`)[0]?.checked)totP++; if(document.getElementsByName(`c_${i}`)[0]?.checked)totC++; if(document.getElementsByName(`h_${i}`)[0]?.checked)totH++; } if(totP+totC>0)r+=`Pasti: ${totP+totC}\n`; if(totH>0)r+=`Hotel: ${totH}\n`; let ric=[]; for(let i=1;i<=ricCount;i++){let d=document.getElementsByName(`rd_${i}`)[0]?.value; let q=document.getElementsByName(`rq_${i}`)[0]?.value; if(d&&q&&parseFloat(q)>0)ric.push(`- ${q}x ${d.toUpperCase()}`);} if(ric.length>0)r+=`Ricambi:\n${ric.join('\n')}\n`; return r; }
+    function condividiWhatsApp() { if(!validaCampiObbligatori())return; if(!navigator.onLine){alert("📵 Offline!");return;} if(!controllaFirma())return; generaIdUnivoco(); const element=document.getElementById('rapporto-foglio'); const idU=document.getElementById('id_univoco_input').value; const nc=document.getElementById('cliente_input').value||'Cliente'; const fn=`Rapporto_${idU}_${nc}.pdf`.replace(/ /g,"_"); let tckVal=document.getElementById('n_rapporto_input').value; if(!tckVal.startsWith("TCK-"))tckVal="TCK-"+tckVal; let inviati=JSON.parse(localStorage.getItem('tmc_ticket_inviati')||'[]'); if(inviati.includes(tckVal)){if(!confirm("⚠️ Già chiuso. Vuoi aggiornare?"))return;} let testoCal=document.getElementById('descrizione_input').value; if(testoCal.indexOf("RAPPORTO INVIATO")===-1)testoCal+=generaRiepilogoCalendario(idU); document.getElementById('loading-overlay').style.display='flex'; document.getElementById('loading-text').innerText="Aggiornamento Calendario..."; fetch(APP_SCRIPT_URL,{method:"POST",headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:"close_ticket",ticket:tckVal,updateCalendario:testoCal,pin:localStorage.getItem('tmc_auth_token')})}).then(()=>{ if(!inviati.includes(tckVal)){inviati.push(tckVal);localStorage.setItem('tmc_ticket_inviati',JSON.stringify(inviati));} let bl=JSON.parse(localStorage.getItem('tmc_bozze_locali')||'[]').filter(b=>b.tck!==tckVal); localStorage.setItem('tmc_bozze_locali',JSON.stringify(bl)); document.getElementById('loading-text').innerText="Generazione PDF..."; preparaSchermoPerPDF(); setTimeout(()=>{html2pdf().set(getPdfOptions(fn)).from(element).output('blob').then(pdfBlob=>{ripristinaSchermo(); document.getElementById('loading-overlay').style.display='none'; const file=new File([pdfBlob],fn,{type:'application/pdf'}); if(navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({title:'Rapporto TMC',text:'In allegato il rapporto.',files:[file]});}else{html2pdf().set(getPdfOptions(fn)).from(element).save();alert("Scaricato.");} }).catch(err=>{ripristinaSchermo(); document.getElementById('loading-overlay').style.display='none';});},100);}); }
+    function inviaEmailAutomaticamente() {
+        if(!validaCampiObbligatori()) return;
+        if(!navigator.onLine) return alert("📵 Offline!");
+        if(!controllaFirma()) return;
+        generaIdUnivoco();
+        const element = document.getElementById('rapporto-foglio');
+        const idU = document.getElementById('id_univoco_input').value;
+        let tckVal = document.getElementById('n_rapporto_input').value;
+        if(!tckVal.startsWith("TCK-")) tckVal = "TCK-" + tckVal;
+        let inviati = JSON.parse(localStorage.getItem('tmc_ticket_inviati') || '[]');
+        if(inviati.includes(tckVal)) { if(!confirm("⚠️ Già inviato. Ri-inviare?")) return; }
+        let testoCal = document.getElementById('descrizione_input').value;
+        if(testoCal.indexOf("RAPPORTO INVIATO") === -1) testoCal += generaRiepilogoCalendario(idU);
+        const emailCliente = document.getElementById('email_input').value || '';
+        const nomeCliente  = document.getElementById('cliente_input').value || 'Cliente';
+        const tecnico      = document.getElementsByName('tecnico_1')[0]?.value || '';
+        document.getElementById('loading-overlay').style.display = 'flex';
+        document.getElementById('loading-text').innerText = "Generazione PDF...";
+        preparaSchermoPerPDF();
+        setTimeout(() => {
+            html2pdf().set(getPdfOptions(tckVal)).from(element).outputPdf('datauristring').then(pdfBase64 => {
+                ripristinaSchermo();
+                document.getElementById('loading-text').innerText = "Invio in corso...";
+                const emailTecnico = localStorage.getItem('tmc_email_tecnico') || '';
+                fetch(APP_SCRIPT_URL, {
+                    method: "POST",
+                    headers: {'Content-Type':'text/plain;charset=utf-8'},
+                    body: JSON.stringify({
+                        action: "send_email", pdfBase64,
+                        ticket: tckVal, updateCalendario: testoCal,
+                        pin: localStorage.getItem('tmc_auth_token'),
+                        filename: `Rapporto_${idU}.pdf`,
+                        nomeCliente, emailCliente, tecnico,
+                        emailTecnico   // ← copia di conferma al tecnico
+                    })
+                }).then(r => r.json()).then(data => {
+                    document.getElementById('loading-overlay').style.display = 'none';
+                    if(data.success) {
+                        // Usa la lista destinatari restituita dal server
+                        const dest = data.destinatari || 'tmcservice@tmcservice.it, info@tmcservice.it';
+                        mostraEsitoEmail(true,
+                            'Il rapporto è stato consegnato correttamente. Il calendario è stato aggiornato.',
+                            dest
+                        );
+                        if(!inviati.includes(tckVal)) {
+                            inviati.push(tckVal);
+                            localStorage.setItem('tmc_ticket_inviati', JSON.stringify(inviati));
+                        }
+                        let bl = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').filter(b => b.tck !== tckVal);
+                        localStorage.setItem('tmc_bozze_locali', JSON.stringify(bl));
+                        document.getElementById('er-btn-ok').onclick = () => { chiudiEsitoEmail(); nuovoRapporto(); };
+                    } else {
+                        mostraEsitoEmail(false,
+                            'Errore dal server: ' + (data.error || 'Sconosciuto') + '\n\nRiprova o contatta l\'ufficio.',
+                            null
+                        );
+                    }
+                }).catch(() => {
+                    document.getElementById('loading-overlay').style.display = 'none';
+                    mostraEsitoEmail(false,
+                        'Errore di rete durante l\'invio. Controlla la connessione e riprova.',
+                        null
+                    );
+                });
+            });
+        }, 500);
+    }
+    function setTipo(val) { document.getElementById('tipo_int_hidden').value=val; document.getElementById('box-G').className='tipo-box'+(val==='G'?' active':''); document.getElementById('box-P').className='tipo-box'+(val==='P'?' active':''); saveDraft(); }
+    function addRow() { rowCount++; const tr=document.createElement('tr'); tr.innerHTML=`<td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data" name="d_${rowCount}" placeholder="Data" readonly style="font-size:9px; text-align:center; width:100%; pointer-events:none; border:none; background:transparent;"></td><td><input type="text" class="save-data caps" name="tec_${rowCount}" placeholder="Nome" style="font-size:8px; text-align:center; width:100%;"><div id="ore_riga_${rowCount}" style="font-size:7px; color:var(--tmc-blue); font-weight:bold; margin-top:2px;"></div></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="va1_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="va2_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="lm1_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="lm2_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="lp1_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="lp2_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="vr1_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="vr2_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><div class="pch-row-a4" style="pointer-events:none;">P<input type="checkbox" class="save-data" name="p_${rowCount}">C<input type="checkbox" class="save-data" name="c_${rowCount}">H<input type="checkbox" class="save-data" name="h_${rowCount}"></div></td><td class="no-print"><button type="button" onclick="eliminaRigaOre(this)" style="background:#ff4444; color:white; border:none; border-radius:3px; padding:3px 6px; font-weight:bold; cursor:pointer;">X</button></td>`; document.getElementById('table-body').appendChild(tr); attachListeners(); }
+    function eliminaRigaOre(btn) { if(!confirm("Eliminare questa riga?"))return; btn.closest('tr').remove(); rinumeraRigheOre(); calc(); }
+    function rinumeraRigheOre() { const righe=document.querySelectorAll('#table-body tr'); rowCount=righe.length; righe.forEach((tr,index)=>{ const i=index+1; tr.querySelectorAll('input, div').forEach(el=>{ if(el.name)el.name=el.name.replace(/_\d+$/,'_'+i); if(el.id)el.id=el.id.replace(/_\d+$/,'_'+i); }); tr.querySelectorAll('td[onclick]').forEach(td=>{ td.setAttribute('onclick',`apriEditorOrari(${i})`); }); }); saveDraft(); }
+    let currentEditRow = null;
+    function formattaDataPerModal(v) { if(!v)return""; if(v.includes('/')) { const p=v.split('/'); return`${p[2]}-${p[1]}-${p[0]}`; } return v; }
+    function formattaDataPerTabella(v) { if(!v)return""; if(v.includes('-')) { const p=v.split('-'); return`${p[2]}/${p[1]}/${p[0]}`; } return v; }
+    function apriEditorOrari(rowIdx) { currentEditRow=rowIdx; const tecName=document.getElementsByName(`tec_${rowIdx}`)[0].value||`TECNICO RIGA ${rowIdx}`; document.getElementById('modal_time_title').innerText=`ORARI: ${tecName.toUpperCase()}`; ['va1','va2','lm1','lm2','lp1','lp2','vr1'].forEach(f=>{ document.getElementById(`modal_${f}`).innerHTML=getTimeOptions(false); }); document.getElementById('modal_vr2').innerHTML=getTimeOptions(true); document.getElementById('modal_d').value=formattaDataPerModal(document.getElementsByName(`d_${rowIdx}`)[0].value); ['va1','va2','lm1','lm2','lp1','lp2','vr1','vr2'].forEach(f=>{ document.getElementById(`modal_${f}`).value=document.getElementsByName(`${f}_${rowIdx}`)[0].value; }); document.getElementById('modal_p').checked=document.getElementsByName(`p_${rowIdx}`)[0].checked; document.getElementById('modal_c').checked=document.getElementsByName(`c_${rowIdx}`)[0].checked; document.getElementById('modal_h').checked=document.getElementsByName(`h_${rowIdx}`)[0].checked; const copyTo=document.getElementById('modal_copy_to'); copyTo.innerHTML='<option value="">-- Non copiare --</option>'; for(let i=1;i<=rowCount;i++){ if(i!==rowIdx){ const name=document.getElementsByName(`tec_${i}`)[0].value||`Riga ${i}`; copyTo.innerHTML+=`<option value="${i}">${name.toUpperCase()}</option>`; } } document.getElementById('time-editor-overlay').style.display='flex'; }
+    function chiudiEditorOrari(salva) { if(salva&&currentEditRow){ const ri=currentEditRow; const tf=['va1','va2','lm1','lm2','lp1','lp2','vr1','vr2']; document.getElementsByName(`d_${ri}`)[0].value=formattaDataPerTabella(document.getElementById('modal_d').value); tf.forEach(f=>{ document.getElementsByName(`${f}_${ri}`)[0].value=document.getElementById(`modal_${f}`).value; }); document.getElementsByName(`p_${ri}`)[0].checked=document.getElementById('modal_p').checked; document.getElementsByName(`c_${ri}`)[0].checked=document.getElementById('modal_c').checked; document.getElementsByName(`h_${ri}`)[0].checked=document.getElementById('modal_h').checked; const ct=document.getElementById('modal_copy_to').value; if(ct){ document.getElementsByName(`d_${ct}`)[0].value=formattaDataPerTabella(document.getElementById('modal_d').value); tf.forEach(f=>{ document.getElementsByName(`${f}_${ct}`)[0].value=document.getElementById(`modal_${f}`).value; }); document.getElementsByName(`p_${ct}`)[0].checked=document.getElementById('modal_p').checked; document.getElementsByName(`c_${ct}`)[0].checked=document.getElementById('modal_c').checked; document.getElementsByName(`h_${ct}`)[0].checked=document.getElementById('modal_h').checked; } calc(); } document.getElementById('time-editor-overlay').style.display='none'; }
+    function modalAutoFill(el) { const selects=Array.from(document.querySelectorAll('.modal-time-select')); const idx=selects.indexOf(el); if(idx!==-1&&idx<selects.length-1){ const next=selects[idx+1]; if(next&&!next.value)next.value=el.value; } }
+    function addRicambio() { ricCount++; const tr=document.createElement('tr'); tr.innerHTML=`<td><input type="text" class="save-data caps" name="rc_${ricCount}"></td><td><input type="text" class="save-data caps" name="rd_${ricCount}"></td><td><input type="number" class="save-data qta" name="rq_${ricCount}"></td><td><input type="text" class="save-data unit" name="ru_${ricCount}"></td><td><input type="text" class="save-data tot-riga" name="rt_${ricCount}"></td>`; document.getElementById('ricambi-body').appendChild(tr); attachListeners(); }
+    function calc() { function toMin(t){if(!t||t===RIT_LABEL)return 0; const p=t.split(':'); return parseInt(p[0])*60+parseInt(p[1]);} const getDiff=(t1,t2)=>{ if(!t1||!t2||t2===RIT_LABEL)return 0; let m1=toMin(t1),m2=toMin(t2); if(m2<m1)m2+=1440; return m2-m1;}; let totL=0,totV=0,totP=0,totC=0,totH=0,hasRit=false; for(let i=1;i<=rowCount;i++){ const g=(n)=>document.getElementsByName(`${n}_${i}`)[0]?.value||""; const gc=(n)=>document.getElementsByName(`${n}_${i}`)[0]?.checked||false; let va1=g('va1'),va2=g('va2'),lm1=g('lm1'),lm2=g('lm2'),lp1=g('lp1'),lp2=g('lp2'),vr1=g('vr1'),vr2=g('vr2'); if(vr2===RIT_LABEL)hasRit=true; let mv=getDiff(va1,va2)+getDiff(vr1,vr2); let ml=getDiff(lm1,lm2)+getDiff(lp1,lp2); totV+=mv; totL+=ml; let tot=mv+ml; const div=document.getElementById(`ore_riga_${i}`); if(div){ if(tot>0){let h=Math.floor(tot/60),m=tot%60; div.innerText=`${h}h${m>0?' '+m+'m':''}`;}else div.innerText=""; } if(gc('p'))totP++; if(gc('c'))totC++; if(gc('h'))totH++; } const fmt=(m)=>{ if(m===0)return""; let h=Math.floor(m/60),m2=m%60; return`${h}h${m2>0?' '+m2+'m':''}`.trim();}; let all=totL+totV; let lbl=all>0?fmt(all):""; if(hasRit&&lbl)lbl+=" + ritorno"; const sl=document.getElementById('tot_lavoro_span'); const sp=document.getElementById('tot_pch_span'); const sh=document.getElementById('tot_hotel_span'); if(sl)sl.innerText=lbl; if(sp)sp.innerText=totP+totC>0?`${totP+totC}`:""; if(sh)sh.innerText=totH>0?`${totH}`:""; saveDraft(); }
+    function openSignature() { const ov=document.getElementById('signature-overlay'); ov.style.display='flex'; canvas.width=canvas.offsetWidth; canvas.height=canvas.offsetHeight; ctx.lineWidth=3; ctx.strokeStyle="#000"; ctx.lineCap="round"; }
+    function closeSignature(save) { if(save){ const url=canvas.toDataURL(); document.getElementById('sig-image').src=url; document.getElementById('sig-image').style.display='block'; document.getElementById('placeholder-firma').style.display='none'; localStorage.setItem('tmc_sig',url); const wb=document.getElementById('wiz-sigbox'); if(wb){ wb.className='sig-area signed'; wb.innerHTML='<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 24 Q10 14 16 20 Q22 26 28 8"/><line x1="4" y1="28" x2="28" y2="28"/></svg><span>Firma acquisita ✓</span>'; } } document.getElementById('signature-overlay').style.display='none'; }
+    function clearSignature(){ctx.clearRect(0,0,canvas.width,canvas.height);}
+    function getPos(e){const r=canvas.getBoundingClientRect(); const cx=e.touches?e.touches[0].clientX:e.clientX; const cy=e.touches?e.touches[0].clientY:e.clientY; return{x:cx-r.left,y:cy-r.top};}
+    canvas.addEventListener('touchstart',e=>{drawing=true;ctx.beginPath();const p=getPos(e);ctx.moveTo(p.x,p.y);e.preventDefault();});
+    canvas.addEventListener('touchmove',e=>{if(!drawing)return;const p=getPos(e);ctx.lineTo(p.x,p.y);ctx.stroke();e.preventDefault();});
+    canvas.addEventListener('touchend',()=>drawing=false);
+    function saveDraft(){const data={};document.querySelectorAll('.save-data').forEach(el=>data[el.name]=(el.type==='checkbox'?el.checked:el.value));localStorage.setItem('tmc_bozza',JSON.stringify(data));localStorage.setItem('tmc_counts',JSON.stringify({r:rowCount,ric:ricCount}));}
+    function loadDraft(){const counts=JSON.parse(localStorage.getItem('tmc_counts')||'{"r":1,"ric":1}');document.getElementById('table-body').innerHTML="";document.getElementById('ricambi-body').innerHTML="";rowCount=0;ricCount=0;for(let i=0;i<counts.r;i++)addRow();for(let i=0;i<counts.ric;i++)addRicambio();const saved=JSON.parse(localStorage.getItem('tmc_bozza')||'{}');if(!saved['descrizione']||saved['descrizione'].trim()==="")saved['descrizione']=FRASE_SICUREZZA;let tCount=1;while(saved['tecnico_'+tCount]!==undefined){if(tCount>1)aggiungiRigaTecnico(saved['tecnico_'+tCount],false);else document.getElementsByName('tecnico_1')[0].value=(saved['tecnico_1']||"").toUpperCase();tCount++;}document.querySelectorAll('.save-data').forEach(el=>{if(saved[el.name]!==undefined)el.type==='checkbox'?el.checked=saved[el.name]:el.value=saved[el.name];});const sig=localStorage.getItem('tmc_sig');if(sig){document.getElementById('sig-image').src=sig;document.getElementById('sig-image').style.display='block';document.getElementById('placeholder-firma').style.display='none';}else{document.getElementById('sig-image').src="";document.getElementById('sig-image').style.display='none';document.getElementById('placeholder-firma').style.display='inline';}setTipo(saved['tipo_int']||'P');
+    // Ripristina campi wizard
+    if(saved['n_rapporto'])document.getElementById('w_ticket').value=saved['n_rapporto'];
+    if(saved['cliente'])document.getElementById('w_cliente').value=saved['cliente'];
+    if(saved['indirizzo'])document.getElementById('w_indirizzo').value=saved['indirizzo'];
+    if(saved['macchina'])document.getElementById('w_matricola').value=saved['macchina'];
+    if(saved['email_cliente'])document.getElementById('w_email').value=saved['email_cliente'];
+    if(saved['mezzo_trasporto'])document.getElementById('w_mezzo').value=saved['mezzo_trasporto'];
+    // Ripristina problema/lavoro dai campi A4 (descrizione contiene il testo unificato)
+    if(saved['descrizione']) {
+        const desc = saved['descrizione'];
+        const mProb = desc.match(/PROBLEMA RISCONTRATO:\n?([\s\S]*?)(?:\n-{4,}|\nLAVORO ESEGUITO:|$)/i);
+        const mLav  = desc.match(/LAVORO ESEGUITO:\n?([\s\S]*?)(?:\nMACCHINA LASCIATA|$)/i);
+        if(document.getElementById('w_problema') && mProb) document.getElementById('w_problema').value = mProb[1].trim();
+        if(document.getElementById('w_lavoro')   && mLav)  document.getElementById('w_lavoro').value   = mLav[1].trim();
+    }
+    // Ripristina tecnici wizard
+    const t1=saved['tecnico_1'];
+    if(t1){document.querySelectorAll('#wiz-tec-grid .tec-btn').forEach(btn=>{if(btn.textContent.trim()===t1.trim())btn.classList.add('sel');});}
+    wizContaChar();
+    calc();}
+    function attachListeners(){document.querySelectorAll('.save-data').forEach(el=>{el.oninput=calc;});}
+    function nuovoRapporto(){if(confirm("Cancellare tutto e iniziare un nuovo rapporto?")){localStorage.removeItem('tmc_bozza');localStorage.removeItem('tmc_counts');localStorage.removeItem('tmc_sig');location.reload();}}
+    window.addEventListener('beforeprint',preparaSchermoPerPDF);
+    window.addEventListener('afterprint',ripristinaSchermo);
+    // Init data wizard al giorno corrente
+    // (w_data rimosso: ora le date sono gestite per giornata in wizGiornate)
+    window.onload = function(){
+        const savedPin = localStorage.getItem('tmc_auth_token');
+        if(savedPin && savedPin !== '') sbloccaApp();
+        else { document.getElementById('login-overlay').style.display = 'flex'; document.getElementById('app-content').style.display = 'none'; }
+        document.getElementById('pin_input').addEventListener("keypress", function(e){ if(e.key==="Enter"){ e.preventDefault(); verificaLogin(); } });
+        document.getElementById('email_tecnico_input').addEventListener("keypress", function(e){ if(e.key==="Enter"){ e.preventDefault(); salvaEmailTecnico(); } });
+        wizUpdateProgress();
+    };
+    </script>
+</body>
+</html>
