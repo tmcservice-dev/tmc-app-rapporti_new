@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" id="viewport-meta">
     <title>TMC Service - App Rapporti A4</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <style>
         :root { --tmc-blue: #0054a6; --tmc-light-blue: #f0f7ff; --tmc-dark: #222; }
         body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 0; background: #525659; color: var(--tmc-dark); }
@@ -132,6 +133,30 @@
         .mat-extra-item { display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid #f5f5f5; }
         .mat-extra-item input.mat-extra-testo { flex:1; border:none; border-bottom:1px solid #cce0f5; font-size:14px; padding:4px 2px; background:transparent; }
         .mat-extra-del { background:none; border:none; color:#ff4444; font-size:18px; font-weight:bold; cursor:pointer; padding:0 4px; }
+        .ric-riga { display:flex; gap:8px; align-items:center; margin-bottom:8px; padding:10px 12px; background:#f8fbff; border:1px solid #cce0f5; border-radius:6px; }
+        .ric-riga input { border:none; border-bottom:1px solid #cce0f5; padding:4px 2px; font-size:14px; background:transparent; outline:none; }
+        .ric-riga input.ric-desc { flex:1; text-transform:uppercase; }
+        .ric-riga input.ric-qta  { width:52px; text-align:center; font-weight:bold; color:var(--tmc-blue); }
+        .ric-riga .ric-del { background:none; border:none; color:#ff4444; font-size:20px; font-weight:bold; cursor:pointer; padding:0 4px; flex-shrink:0; }
+
+        /* ── CALENDARIO PICKER ── */
+        .cal-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9500; align-items:center; justify-content:center; padding:20px; box-sizing:border-box; }
+        .cal-box { background:white; border-radius:10px; padding:16px; width:100%; max-width:340px; box-shadow:0 4px 20px rgba(0,0,0,0.3); }
+        .cal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+        .cal-header h3 { margin:0; font-size:15px; color:var(--tmc-blue); font-weight:bold; text-transform:capitalize; }
+        .cal-nav { background:none; border:1px solid var(--tmc-blue); color:var(--tmc-blue); border-radius:5px; padding:5px 12px; font-size:16px; font-weight:bold; cursor:pointer; }
+        .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
+        .cal-dow { text-align:center; font-size:10px; font-weight:bold; color:#888; padding:4px 0; }
+        .cal-day { text-align:center; padding:8px 2px; font-size:13px; border-radius:5px; cursor:pointer; border:none; background:transparent; width:100%; }
+        .cal-day:hover:not(.vuoto) { background:#f0f7ff; }
+        .cal-day.oggi { border:1.5px solid var(--tmc-blue); color:var(--tmc-blue); font-weight:bold; }
+        .cal-day.selezionato { background:var(--tmc-blue); color:white !important; font-weight:bold; }
+        .cal-day.altra-giornata { background:#e6f1fb; color:var(--tmc-blue); font-weight:bold; }
+        .cal-day.vuoto { cursor:default; pointer-events:none; }
+        .cal-actions { display:flex; gap:8px; margin-top:14px; }
+        .cal-btn-annulla { flex:1; padding:11px; border:1px solid #ddd; border-radius:6px; background:white; color:#666; font-size:13px; font-weight:bold; cursor:pointer; }
+        .cal-btn-conferma { flex:2; padding:11px; border:none; border-radius:6px; background:var(--tmc-blue); color:white; font-size:13px; font-weight:bold; cursor:pointer; }
+
         .page-a4 { background: white; width: 210mm; min-height: 297mm; margin: 10px auto; padding: 1mm 8mm 2mm 8mm; box-sizing: border-box; box-shadow: 0 0 10px rgba(0,0,0,0.5); display: flex; flex-direction: column; position: relative; }
         @media screen and (max-width: 210mm) { body { background: white; } .page-a4 { width: 100%; margin: 0; padding: 10px; box-shadow: none; } }
         body.pdf-mode { background: white !important; }
@@ -456,7 +481,11 @@
                         <button id="wiz-giorno-next" onclick="wizCambiaGiorno(+1)"
                             style="padding:8px 12px; border:1px solid var(--tmc-blue); background:white; color:var(--tmc-blue); border-radius:5px; font-weight:bold; cursor:pointer; font-size:16px;">›</button>
                     </div>
-                    <input type="date" id="wiz-giorno-data" oninput="wizSalvaDataGiorno()" style="width:100%; padding:8px; border:1px solid #cce0f5; border-radius:5px; font-size:14px;">
+                    <button onclick="calApri()" id="wiz-giorno-data-btn"
+                        style="width:100%; padding:10px; border:1.5px solid var(--tmc-blue); background:#f0f7ff; color:var(--tmc-blue); border-radius:5px; font-size:14px; font-weight:bold; cursor:pointer; text-align:center;">
+                        📅 <span id="wiz-giorno-data-label">Seleziona data</span>
+                    </button>
+                    <input type="hidden" id="wiz-giorno-data">
                     <div style="display:flex; gap:6px; margin-top:8px;">
                         <button onclick="wizAggiungiGiorno()" style="flex:1; padding:9px; border:1px dashed var(--tmc-blue); background:white; color:var(--tmc-blue); border-radius:5px; font-size:12px; font-weight:bold; cursor:pointer;">+ AGGIUNGI GIORNATA</button>
                         <button id="wiz-giorno-elimina" onclick="wizEliminaGiorno()" style="flex:0 0 auto; padding:9px 14px; border:none; background:#ff4444; color:white; border-radius:5px; font-size:12px; font-weight:bold; cursor:pointer; display:none;">🗑 ELIMINA</button>
@@ -514,6 +543,48 @@
 
                 <!-- Campo nascosto che contiene il testo unificato sincronizzato con A4 -->
                 <input type="hidden" id="w_desc">
+            </div>
+
+            <!-- STEP 4r: RICAMBI (obbligatorio) -->
+            <div class="wiz-screen" id="ws4r">
+                <div class="wiz-head">
+                    <div class="wiz-pill" id="ws4r-pill">Step — Ricambi</div>
+                    <h2>Hai utilizzato ricambi?</h2>
+                    <p>Indica se sono stati montati componenti o materiali durante l'intervento.</p>
+                </div>
+                <div class="wiz-alert" id="werr4r" style="display:none;">⚠️ Scegli se hai utilizzato ricambi oppure no.</div>
+
+                <!-- Scelta Sì / No -->
+                <div style="display:flex; gap:10px; margin-bottom:1.2rem;">
+                    <button id="wiz-ric-btn-no" onclick="wizRicScelta('no')"
+                        style="flex:1; padding:18px; border:1.5px solid #ccc; border-radius:8px; background:white; font-size:16px; font-weight:bold; color:#666; cursor:pointer;">
+                        ✗ No
+                    </button>
+                    <button id="wiz-ric-btn-si" onclick="wizRicScelta('si')"
+                        style="flex:1; padding:18px; border:1.5px solid #ccc; border-radius:8px; background:white; font-size:16px; font-weight:bold; color:#666; cursor:pointer;">
+                        ✓ Sì
+                    </button>
+                </div>
+
+                <!-- Pannello ricambi (visibile solo se Sì) -->
+                <div id="wiz-ric-pannello" style="display:none;">
+                    <div class="wiz-divider"></div>
+
+                    <!-- Flag ricambi forniti dal cliente -->
+                    <label style="display:flex; align-items:center; gap:12px; padding:12px 14px; background:#fff8e1; border:1px solid #ffe082; border-radius:6px; cursor:pointer; margin-bottom:14px; font-size:14px; font-weight:bold; color:#7B5800;">
+                        <input type="checkbox" id="wiz-ric-cliente" style="width:22px; height:22px; cursor:pointer; accent-color:var(--tmc-blue);" onchange="wizRicSyncA4()">
+                        🔧 Ricambi forniti dal cliente
+                    </label>
+
+                    <!-- Lista righe ricambi -->
+                    <div id="wiz-ric-lista"></div>
+
+                    <!-- Pulsante aggiungi riga -->
+                    <button onclick="wizRicAggiungiRiga()"
+                        style="width:100%; margin-top:8px; padding:12px; border:1.5px dashed var(--tmc-blue); border-radius:6px; background:#f0f7ff; color:var(--tmc-blue); font-size:13px; font-weight:bold; cursor:pointer;">
+                        + Aggiungi ricambio
+                    </button>
+                </div>
             </div>
 
             <!-- STEP 4c: ANTEPRIMA A4 OBBLIGATORIA -->
@@ -581,6 +652,7 @@
                 <div class="recap-row"><div class="rl">Data</div><div class="rv" id="wr_data">—</div></div>
                 <div class="recap-row"><div class="rl">Descrizione (anteprima)</div><div class="rv" id="wr_desc" style="font-size:12px;font-weight:400;white-space:pre-wrap;max-height:64px;overflow:hidden">—</div></div>
                 <div class="recap-row" id="wr_mat_row" style="display:none"><div class="rl">Materiali utilizzati</div><div class="rv" id="wr_mat" style="font-size:12px;font-weight:400;">—</div></div>
+                <div class="recap-row" id="wr_ric_row" style="display:none"><div class="rl">Ricambi montati</div><div class="rv" id="wr_ric" style="font-size:12px;font-weight:400;">—</div></div>
 
                 <!-- EMAIL con avviso visivo -->
                 <div class="wiz-field" style="margin-top:1rem">
@@ -663,7 +735,7 @@
                 <button class="btn btn-dark" onclick="addRow()">+ GIORNO/TECNICO</button>
                 <button class="btn btn-dark" onclick="addRicambio()">+ RICAMBIO</button>
                 <button class="btn btn-orange" style="background:#ff9800; min-width:100%;" onclick="apriBozze()">📂 ARCHIVIO BOZZE</button>
-                <button class="btn btn-blue" onclick="salvaPDF()">SALVA PDF (Solo Cellulare)</button>
+                <button class="btn btn-blue" onclick="salvaPDF()">💾 SALVA PDF</button>
                 <button class="btn btn-green" onclick="condividiWhatsApp()">WHATSAPP + CALENDARIO</button>
                 <button class="btn btn-orange" style="background:#e91e63;" onclick="inviaEmailAutomaticamente()">INVIA EMAIL + CALENDARIO</button>
                 <button class="btn" style="background:red;" onclick="nuovoRapporto()">RESET NUOVO</button>
@@ -681,6 +753,28 @@
             <p id="er-dettaglio" style="font-size:13px; color:#555; margin:0 0 20px; line-height:1.5;"></p>
             <div id="er-destinatari" style="background:#f8fbff; border-radius:6px; padding:10px 14px; font-size:12px; color:#444; text-align:left; margin-bottom:20px; display:none;"></div>
             <button id="er-btn-ok" onclick="chiudiEsitoEmail()" style="width:100%; padding:13px; background:var(--tmc-blue); color:white; border:none; border-radius:6px; font-size:15px; font-weight:bold; cursor:pointer;">OK</button>
+        </div>
+    </div>
+
+    <!-- CALENDARIO PICKER -->
+    <div class="cal-overlay" id="cal-overlay">
+        <div class="cal-box">
+            <div class="cal-header">
+                <button class="cal-nav" onclick="calMese(-1)">‹</button>
+                <h3 id="cal-titolo">—</h3>
+                <button class="cal-nav" onclick="calMese(+1)">›</button>
+            </div>
+            <div class="cal-grid" id="cal-grid-dow">
+                <div class="cal-dow">Lun</div><div class="cal-dow">Mar</div>
+                <div class="cal-dow">Mer</div><div class="cal-dow">Gio</div>
+                <div class="cal-dow">Ven</div><div class="cal-dow">Sab</div>
+                <div class="cal-dow">Dom</div>
+            </div>
+            <div class="cal-grid" id="cal-grid-days"></div>
+            <div class="cal-actions">
+                <button class="cal-btn-annulla" onclick="calChiudi()">Annulla</button>
+                <button class="cal-btn-conferma" onclick="calConferma()">Conferma</button>
+            </div>
         </div>
     </div>
 
@@ -718,11 +812,11 @@
     // WIZARD — stato
     // ═══════════════════════════════════════════════
     let wizCur = 1;
-    // wizSteps: sequenza step attivi. '4b'=materiali e '4c'=anteprima A4 sono condizionali
-    let wizSteps = [1, 2, 3, 4, '4c', 5];
+    // wizSteps: sequenza step attivi. '4b'=materiali e '4c'=anteprima A4 sono condizionali, '4r' fisso
+    let wizSteps = [1, 2, 3, 4, '4r', '4c', 5];
     const WIZ_NAMES_MAP = {
         1: 'Intervento', 2: 'Tecnici', 3: 'Orari',
-        4: 'Descrizione', '4b': 'Materiali', '4c': 'Anteprima A4', 5: 'Firma e invio'
+        4: 'Descrizione', '4r': 'Ricambi', '4b': 'Materiali', '4c': 'Anteprima A4', 5: 'Firma e invio'
     };
 
     // Materiali dal calendario
@@ -752,7 +846,7 @@
         const btnNext = document.getElementById('wiz-btn-next');
         btnNext.style.display = wizCur !== 5 ? 'block' : 'none';
         // Aggiorna pill dinamiche
-        ['4b','4c'].forEach(k => {
+        ['4b','4c','4r'].forEach(k => {
             const el = document.getElementById('ws'+k+'-pill');
             if (el) el.textContent = 'Step ' + (wizSteps.indexOf(k)+1) + ' — ' + WIZ_NAMES_MAP[k];
         });
@@ -783,6 +877,7 @@
         if (wizCur === 2)    { valid = wizVal2();   if (!valid) document.getElementById('werr2').style.display = 'block'; wizRenderGiorno(); }
         if (wizCur === 3)    { valid = wizVal3();   if (!valid) document.getElementById('werr3').style.display = 'block'; else wizSyncAllOrariA4(); }
         if (wizCur === 4)    { valid = wizVal4();   if (!valid) document.getElementById('werr4').style.display = 'block'; }
+        if (wizCur === '4r') { valid = wizVal4r();  if (!valid) document.getElementById('werr4r').style.display = 'block'; else wizRicSyncA4(); }
         if (wizCur === '4c') { valid = wizVal4c();  if (!valid) document.getElementById('werr4c').style.display = 'block'; }
         if (wizCur === '4b') {
             // Sincronizza sempre i materiali verso A4, poi procedi
@@ -813,18 +908,18 @@
     }
 
     function hideAllWizErrors() {
-        [1,2,3,4,'4b','4c',5].forEach(i => {
+        [1,2,3,4,'4r','4b','4c',5].forEach(i => {
             const el = document.getElementById('werr' + i);
             if (el) el.style.display = 'none';
         });
     }
 
-    // Aggiorna stepper: inserisce/rimuove '4b' (materiali) dopo 4, prima di '4c'
+    // Aggiorna stepper: inserisce/rimuove '4b' (materiali calendario) dopo '4r'
     function wizAggiornaStepper(hasMateriali) {
         wizSteps = wizSteps.filter(s => s !== '4b');
         if (hasMateriali) {
-            const idx4 = wizSteps.indexOf(4);
-            wizSteps.splice(idx4 + 1, 0, '4b');
+            const idx4r = wizSteps.indexOf('4r');
+            wizSteps.splice(idx4r + 1, 0, '4b');
         }
         wizUpdateProgress();
     }
@@ -891,6 +986,90 @@
         const lavoro = (document.getElementById('w_lavoro')?.value || '').trim();
         return lavoro.length >= 10;
     }
+    // ── STEP 4r: RICAMBI ──────────────────────────────────────
+    let wizRicSceltaValore = null; // null=non scelto, 'si', 'no'
+    let wizRicRighe = [];          // [{desc, qta}]
+
+    function wizVal4r() {
+        document.getElementById('werr4r').style.display = 'none';
+        return wizRicSceltaValore !== null;
+    }
+
+    function wizRicScelta(valore) {
+        wizRicSceltaValore = valore;
+        const btnNo = document.getElementById('wiz-ric-btn-no');
+        const btnSi = document.getElementById('wiz-ric-btn-si');
+        const pannello = document.getElementById('wiz-ric-pannello');
+        // Stile pulsanti
+        const stileSel = `flex:1; padding:18px; border:2px solid var(--tmc-blue); border-radius:8px; font-size:16px; font-weight:bold; cursor:pointer;`;
+        const stileNorm = `flex:1; padding:18px; border:1.5px solid #ccc; border-radius:8px; background:white; font-size:16px; font-weight:bold; color:#666; cursor:pointer;`;
+        if (valore === 'no') {
+            btnNo.style.cssText = stileSel + ' background:var(--tmc-blue); color:white;';
+            btnSi.style.cssText = stileNorm;
+            pannello.style.display = 'none';
+            wizRicRighe = [];
+        } else {
+            btnSi.style.cssText = stileSel + ' background:var(--tmc-blue); color:white;';
+            btnNo.style.cssText = stileNorm;
+            pannello.style.display = 'block';
+            if (wizRicRighe.length === 0) wizRicAggiungiRiga();
+        }
+        document.getElementById('werr4r').style.display = 'none';
+    }
+
+    function wizRicAggiungiRiga(desc = '', qta = 1) {
+        wizRicRighe.push({ desc, qta });
+        wizRicRenderLista();
+    }
+
+    function wizRicRimuoviRiga(idx) {
+        wizRicRighe.splice(idx, 1);
+        wizRicRenderLista();
+    }
+
+    function wizRicRenderLista() {
+        const container = document.getElementById('wiz-ric-lista');
+        container.innerHTML = '';
+        wizRicRighe.forEach((r, idx) => {
+            const div = document.createElement('div');
+            div.className = 'ric-riga';
+            div.innerHTML = `
+                <input type="text" class="ric-desc" placeholder="Descrizione ricambio..."
+                    value="${r.desc}"
+                    oninput="wizRicRighe[${idx}].desc=this.value.toUpperCase(); this.value=this.value.toUpperCase();">
+                <input type="number" class="ric-qta" placeholder="Q.tà" value="${r.qta}" min="1"
+                    oninput="wizRicRighe[${idx}].qta=parseInt(this.value)||1;">
+                <button class="ric-del" onclick="wizRicRimuoviRiga(${idx})" title="Rimuovi">×</button>
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    // Sincronizza ricambi wizard → tabella A4
+    function wizRicSyncA4() {
+        if (wizRicSceltaValore !== 'si' || wizRicRighe.length === 0) return;
+        // Svuota righe ricambi A4 e reinserisce
+        document.getElementById('ricambi-body').innerHTML = '';
+        ricCount = 0;
+        const fornitoDaCliente = document.getElementById('wiz-ric-cliente')?.checked;
+        wizRicRighe.forEach(r => {
+            if (!r.desc && !r.qta) return;
+            ricCount++;
+            const tr = document.createElement('tr');
+            const desc = r.desc + (fornitoDaCliente ? ' (FORN. CLIENTE)' : '');
+            tr.innerHTML = `
+                <td><input type="text" class="save-data caps" name="rc_${ricCount}" value=""></td>
+                <td><input type="text" class="save-data caps" name="rd_${ricCount}" value="${desc}"></td>
+                <td><input type="number" class="save-data qta" name="rq_${ricCount}" value="${r.qta}"></td>
+                <td><input type="text" class="save-data unit" name="ru_${ricCount}" value=""></td>
+                <td><input type="text" class="save-data tot-riga" name="rt_${ricCount}" value=""></td>
+            `;
+            document.getElementById('ricambi-body').appendChild(tr);
+        });
+        attachListeners();
+        calc();
+    }
+
     function wizVal4c() {
         document.getElementById('werr4c').style.display = 'none';
         return document.getElementById('w_revisione_ok')?.checked;
@@ -958,11 +1137,94 @@
         const g = wizGiornoCorrente();
         if (!g) return;
         g.data = document.getElementById('wiz-giorno-data').value;
-        // Aggiorna label
-        const lbl = document.getElementById('wiz-giorno-label');
-        lbl.textContent = g.data
+        // Aggiorna il pulsante
+        const lbl = document.getElementById('wiz-giorno-data-label');
+        const mainLbl = document.getElementById('wiz-giorno-label');
+        const dataFmt = g.data
             ? new Date(g.data + 'T12:00').toLocaleDateString('it-IT', {weekday:'long',day:'2-digit',month:'long',year:'numeric'})
-            : 'Data non impostata';
+            : 'Seleziona data';
+        if (lbl) lbl.textContent = dataFmt;
+        if (mainLbl) mainLbl.textContent = dataFmt;
+    }
+
+    // ── CALENDARIO PICKER ────────────────────────────────────
+    let calAnno = 0, calMeseIdx = 0, calDataSelezionata = '';
+
+    function calApri() {
+        const g = wizGiornoCorrente();
+        const dataAttuale = g?.data || new Date().toISOString().split('T')[0];
+        const d = new Date(dataAttuale + 'T12:00');
+        calAnno = d.getFullYear();
+        calMeseIdx = d.getMonth();
+        calDataSelezionata = dataAttuale;
+        calRenderGriglia();
+        const ov = document.getElementById('cal-overlay');
+        ov.style.display = 'flex';
+    }
+
+    function calChiudi() {
+        document.getElementById('cal-overlay').style.display = 'none';
+    }
+
+    function calConferma() {
+        if (!calDataSelezionata) { calChiudi(); return; }
+        document.getElementById('wiz-giorno-data').value = calDataSelezionata;
+        wizSalvaDataGiorno();
+        calChiudi();
+    }
+
+    function calMese(delta) {
+        calMeseIdx += delta;
+        if (calMeseIdx > 11) { calMeseIdx = 0; calAnno++; }
+        if (calMeseIdx < 0)  { calMeseIdx = 11; calAnno--; }
+        calRenderGriglia();
+    }
+
+    function calRenderGriglia() {
+        const MESI = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+                      'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+        document.getElementById('cal-titolo').textContent = `${MESI[calMeseIdx]} ${calAnno}`;
+
+        const grid = document.getElementById('cal-grid-days');
+        grid.innerHTML = '';
+
+        // Date delle altre giornate già inserite (per colorarle)
+        const altreDate = wizGiornate
+            .filter(g => g.data && g.data !== calDataSelezionata)
+            .map(g => g.data);
+
+        const oggi = new Date();
+        oggi.setHours(0,0,0,0);
+        const primoGiorno = new Date(calAnno, calMeseIdx, 1);
+        // Giorno della settimana del primo (0=Dom → lo trasformiamo in Lun=0)
+        let startDow = primoGiorno.getDay(); // 0=Dom
+        startDow = (startDow === 0) ? 6 : startDow - 1; // 0=Lun..6=Dom
+        const giorniMese = new Date(calAnno, calMeseIdx + 1, 0).getDate();
+
+        // Celle vuote prima del primo giorno
+        for (let i = 0; i < startDow; i++) {
+            const vuoto = document.createElement('button');
+            vuoto.className = 'cal-day vuoto';
+            grid.appendChild(vuoto);
+        }
+
+        for (let d = 1; d <= giorniMese; d++) {
+            const dataStr = `${calAnno}-${String(calMeseIdx+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const dataObj = new Date(calAnno, calMeseIdx, d);
+            const btn = document.createElement('button');
+            btn.className = 'cal-day';
+            btn.textContent = d;
+
+            if (dataStr === calDataSelezionata) btn.classList.add('selezionato');
+            else if (altreDate.includes(dataStr))   btn.classList.add('altra-giornata');
+            else if (dataObj.getTime() === oggi.getTime()) btn.classList.add('oggi');
+
+            btn.onclick = () => {
+                calDataSelezionata = dataStr;
+                calRenderGriglia(); // aggiorna evidenziazione
+            };
+            grid.appendChild(btn);
+        }
     }
 
     function wizToggleTecGiorno(nome) {
@@ -984,9 +1246,12 @@
         // Header navigazione giornata
         document.getElementById('wiz-giorno-counter').textContent = `Giornata ${wizGiornoIdx + 1} di ${wizGiornate.length}`;
         document.getElementById('wiz-giorno-data').value = g.data || '';
-        document.getElementById('wiz-giorno-label').textContent = g.data
+        const dataFmt = g.data
             ? new Date(g.data + 'T12:00').toLocaleDateString('it-IT', {weekday:'long',day:'2-digit',month:'long',year:'numeric'})
-            : 'Data non impostata';
+            : 'Seleziona data';
+        const lbl = document.getElementById('wiz-giorno-data-label');
+        if (lbl) lbl.textContent = dataFmt;
+        document.getElementById('wiz-giorno-label').textContent = dataFmt;
         document.getElementById('wiz-giorno-prev').disabled = wizGiornoIdx === 0;
         document.getElementById('wiz-giorno-next').disabled = wizGiornoIdx === wizGiornate.length - 1;
         document.getElementById('wiz-giorno-prev').style.opacity = wizGiornoIdx === 0 ? '0.4' : '1';
@@ -1412,6 +1677,21 @@
         const matEl  = document.getElementById('wr_mat');
         if (tuttiMat.length > 0) { matEl.textContent=tuttiMat.join('\n'); matRow.style.display='block'; }
         else matRow.style.display='none';
+        // Riepilogo ricambi wizard
+        const ricRow = document.getElementById('wr_ric_row');
+        const ricEl  = document.getElementById('wr_ric');
+        if (ricRow && ricEl) {
+            if (wizRicSceltaValore === 'si' && wizRicRighe.length > 0) {
+                const forn = document.getElementById('wiz-ric-cliente')?.checked ? ' (forniti dal cliente)' : '';
+                ricEl.textContent = wizRicRighe.map(r => `${r.qta}× ${r.desc}`).join('\n') + forn;
+                ricRow.style.display = 'block';
+            } else if (wizRicSceltaValore === 'no') {
+                ricEl.textContent = 'Nessun ricambio utilizzato';
+                ricRow.style.display = 'block';
+            } else {
+                ricRow.style.display = 'none';
+            }
+        }
         // Firma
         const sig = localStorage.getItem('tmc_sig');
         const sigBox = document.getElementById('wiz-sigbox');
@@ -1584,7 +1864,7 @@
         if (errori.length > 0) { alert("⚠️ ATTENZIONE:\n\n" + errori.join("\n")); return false; }
         return true;
     }
-    function salvaPDF() { if (!validaCampiObbligatori()) return; window.print(); }
+    // salvaPDF è definita più avanti nella sezione PDF jsPDF
     async function salvaBozzaAttuale() { const ticket = document.getElementById('n_rapporto_input').value; const tecnico = document.getElementsByName('tecnico_1')[0].value || "Nessun Tecnico"; if (!ticket || ticket === "TCK-") { alert("⚠️ Inserisci almeno il numero di rapporto."); return; } const dataInputs = {}; document.querySelectorAll('.save-data').forEach(el => dataInputs[el.name] = (el.type==='checkbox' ? el.checked : el.value)); const payload = { inputs: dataInputs, counts: {r: rowCount, ric: ricCount}, sig: localStorage.getItem('tmc_sig') }; let bozzeLocali = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]'); bozzeLocali = bozzeLocali.filter(b => b.tck !== ticket); bozzeLocali.push({ tck: ticket, tecnico: tecnico, payload: payload, data: Date.now() }); localStorage.setItem('tmc_bozze_locali', JSON.stringify(bozzeLocali)); if (navigator.onLine) { document.getElementById('loading-overlay').style.display = 'flex'; document.getElementById('loading-text').innerText = "Sincronizzazione Cloud..."; try { const res = await fetch(APP_SCRIPT_URL, { method: "POST", headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: "save_cloud", tck: ticket, tecnico: tecnico, content: payload, pin: localStorage.getItem('tmc_auth_token') }) }); const out = await res.json(); if (out.success) { bozzeLocali = bozzeLocali.filter(b => b.tck !== ticket); localStorage.setItem('tmc_bozze_locali', JSON.stringify(bozzeLocali)); alert("✅ Salvato e sincronizzato."); } } catch(e) { alert("⚠️ Connessione debole. Salvato solo sul telefono."); } finally { document.getElementById('loading-overlay').style.display = 'none'; } } else { alert("📵 Offline. Salvato sul telefono."); } if(document.getElementById('drafts-overlay').style.display === 'flex') { apriBozze(); } }
     async function apriBozze() { document.getElementById('drafts-overlay').style.display = 'flex'; aggiornaListaBozzeLocali(); const cloudContainer = document.getElementById('lista-bozze-cloud'); if (!navigator.onLine) { cloudContainer.innerHTML = "<p style='font-size:12px; color:red;'>📵 Offline.</p>"; return; } cloudContainer.innerHTML = "<p>Download dal Cloud... ⏳</p>"; try { const res = await fetch(APP_SCRIPT_URL, { method: "POST", headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: "get_bozze", pin: localStorage.getItem('tmc_auth_token') }) }); const data = await res.json(); if (data.success) aggiornaListaBozzeCloud(data.bozze); else cloudContainer.innerHTML = "<p style='color:red;'>Errore.</p>"; } catch(e) { cloudContainer.innerHTML = "<p style='color:red;'>Errore rete.</p>"; } }
     function aggiornaListaBozzeLocali() { const container = document.getElementById('lista-bozze-locali'); const bozzeLocali = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]'); container.innerHTML = ""; if(bozzeLocali.length === 0) { container.innerHTML = "<p style='font-size:11px; color:#666;'>Nessuna bozza locale.</p>"; return; } bozzeLocali.forEach(b => { const div = document.createElement('div'); div.className = "draft-item"; let df = new Date(b.data).toLocaleString('it-IT', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); div.innerHTML = `<div style="flex:1;"><strong style="font-size:12px; color:#e65100;">${b.tck}</strong><br><span style="font-size:9px;">${b.tecnico} - ${df}</span></div><div style="display:flex; gap:4px;"><button onclick="caricaBozzaLocale('${b.tck}')" style="background:#25D366; padding:6px; font-size:10px; color:white; border:none; border-radius:3px;">APRI</button><button onclick="sincronizzaManualmente('${b.tck}')" style="background:var(--tmc-blue); padding:6px; font-size:10px; color:white; border:none; border-radius:3px;">☁️</button><button onclick="eliminaBozzaLocale('${b.tck}')" style="background:#ff4444; padding:6px; font-size:10px; color:white; border:none; border-radius:3px;">X</button></div>`; container.appendChild(div); }); }
@@ -1601,9 +1881,8 @@
     function apriEditorEmail() { document.getElementById('modal_email_input').value = document.getElementById('email_input').value; document.getElementById('email-editor-overlay').style.display = 'flex'; setTimeout(() => document.getElementById('modal_email_input').focus(), 100); }
     function chiudiEditorEmail(salva) { if(salva) { const em = document.getElementById('modal_email_input').value.trim(); document.getElementById('email_input').value = em; if(document.getElementById('w_email')) document.getElementById('w_email').value = em; if(em.includes('@')) { const est = em.split('@')[0].replace(/\./g,' ').toUpperCase(); document.getElementsByName('nome_responsabile')[0].value = est; } saveDraft(); } document.getElementById('email-editor-overlay').style.display = 'none'; }
     let rowCount = 0; let ricCount = 0;
-    const canvas = document.getElementById('canvas-fullscreen');
-    const ctx = canvas.getContext('2d');
-    let drawing = false;
+    // canvas e ctx inizializzati in window.onload (evita crash se DOM non ancora pronto)
+    let canvas = null, ctx = null, drawing = false;
     function getTimeOptions(includiRit = false) { let opt = '<option value="">--</option>'; if(includiRit) opt += `<option value="${RIT_LABEL}">${RIT_LABEL}</option>`; for(let h=5; h<=22; h++) { let hh = h<10?'0'+h:h; ['00','30'].forEach(mm => { if(!(h==22&&mm=='30')) opt += `<option value="${hh}:${mm}">${hh}:${mm}</option>`; }); } return opt; }
     function aggiornaVrSelect() { const vr2 = document.getElementById('modal_vr2'); const cur = vr2.value; vr2.innerHTML = getTimeOptions(true); if(cur) vr2.value = cur; }
     function aggiungiRigaTecnico(valore = "", aggiungiRigaTabella = true) { const container = document.getElementById('lista-tecnici-inputs'); const idx = container.querySelectorAll('.tecnico-riga').length + 1; const div = document.createElement('div'); div.className = "tecnico-riga"; div.style.cssText = "display:flex; gap:5px; margin-top:5px;"; div.innerHTML = `<div class="tecnico-combo" style="flex:1;"><input type="text" name="tecnico_${idx}" class="save-data tecnico-input-main caps" value="${valore.toUpperCase()}"><select class="tecnico-select-bg" onchange="this.previousElementSibling.value=this.value; saveDraft();"><option value=""></option><option>CARINI MARCO</option><option>LIVIU CIORICI</option><option>MARIN CIORESCU</option><option>ATTILIO MASERATI</option><option>POLLEDRI RICCARDO</option><option>GAZZOLA MASSIMO</option><option>BRAGHIERI STEFANO</option><option>COROLI LORENZO</option><option>CREMONESI NICOLA</option><option>MARLIERI GIUSEPPE</option><option>MARZAROLI EMILIO</option><option>PICCOLI GIULIANO</option><option>IVAN ISOPESCU</option><option>MAZZOCCHI MIRCO</option><option>MOIA LUIGI</option><option>RIMONDI MARCO</option></select></div><button type="button" class="no-print" onclick="this.parentElement.remove(); saveDraft();" style="background:#ff4444; color:white; border:none; border-radius:3px; padding:0 8px; font-weight:bold; cursor:pointer;">X</button>`; container.appendChild(div); if(aggiungiRigaTabella) { addRow(); if(valore && document.getElementsByName(`tec_${rowCount}`)[0]) document.getElementsByName(`tec_${rowCount}`)[0].value = valore.toUpperCase(); } attachListeners(); }
@@ -1682,78 +1961,514 @@
         document.getElementById('id_univoco_input').value = "";
         generaIdUnivoco(); saveDraft();
     }
-    function preparaSchermoPerPDF() { window.scrollTo(0,0); document.getElementById('viewport-meta').setAttribute('content','width=1024'); document.body.classList.add('pdf-mode'); const ta=document.getElementById('descrizione_input'); const tp=document.getElementById('descrizione_print'); tp.innerText=ta.value; ta.style.display='none'; tp.style.display='block'; }
-    function ripristinaSchermo() { document.getElementById('viewport-meta').setAttribute('content','width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'); document.body.classList.remove('pdf-mode'); document.getElementById('descrizione_input').style.display='block'; document.getElementById('descrizione_print').style.display='none'; }
-    function getPdfOptions(fileName) { return { margin:[1,0,2,0], filename:fileName, image:{type:'jpeg',quality:0.98}, html2canvas:{scale:2,useCORS:true,scrollY:0}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}, pagebreak:{mode:['css','legacy'],avoid:['tr','.card','.bottom-grid','.main-title-container']} }; }
-    function generaRiepilogoCalendario(idUnivoco) { let r=`\n\n--- RAPPORTO INVIATO (${idUnivoco}) ---\n`; let lav=document.getElementById('tot_lavoro_span')?.innerText||""; if(lav) r+=`Ore: ${lav}\n`; let totP=0,totC=0,totH=0; for(let i=1;i<=rowCount;i++){ if(document.getElementsByName(`p_${i}`)[0]?.checked)totP++; if(document.getElementsByName(`c_${i}`)[0]?.checked)totC++; if(document.getElementsByName(`h_${i}`)[0]?.checked)totH++; } if(totP+totC>0)r+=`Pasti: ${totP+totC}\n`; if(totH>0)r+=`Hotel: ${totH}\n`; let ric=[]; for(let i=1;i<=ricCount;i++){let d=document.getElementsByName(`rd_${i}`)[0]?.value; let q=document.getElementsByName(`rq_${i}`)[0]?.value; if(d&&q&&parseFloat(q)>0)ric.push(`- ${q}x ${d.toUpperCase()}`);} if(ric.length>0)r+=`Ricambi:\n${ric.join('\n')}\n`; return r; }
-    function condividiWhatsApp() { if(!validaCampiObbligatori())return; if(!navigator.onLine){alert("📵 Offline!");return;} if(!controllaFirma())return; generaIdUnivoco(); const element=document.getElementById('rapporto-foglio'); const idU=document.getElementById('id_univoco_input').value; const nc=document.getElementById('cliente_input').value||'Cliente'; const fn=`Rapporto_${idU}_${nc}.pdf`.replace(/ /g,"_"); let tckVal=document.getElementById('n_rapporto_input').value; if(!tckVal.startsWith("TCK-"))tckVal="TCK-"+tckVal; let inviati=JSON.parse(localStorage.getItem('tmc_ticket_inviati')||'[]'); if(inviati.includes(tckVal)){if(!confirm("⚠️ Già chiuso. Vuoi aggiornare?"))return;} let testoCal=document.getElementById('descrizione_input').value; if(testoCal.indexOf("RAPPORTO INVIATO")===-1)testoCal+=generaRiepilogoCalendario(idU); document.getElementById('loading-overlay').style.display='flex'; document.getElementById('loading-text').innerText="Aggiornamento Calendario..."; fetch(APP_SCRIPT_URL,{method:"POST",headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:"close_ticket",ticket:tckVal,updateCalendario:testoCal,pin:localStorage.getItem('tmc_auth_token')})}).then(()=>{ if(!inviati.includes(tckVal)){inviati.push(tckVal);localStorage.setItem('tmc_ticket_inviati',JSON.stringify(inviati));} let bl=JSON.parse(localStorage.getItem('tmc_bozze_locali')||'[]').filter(b=>b.tck!==tckVal); localStorage.setItem('tmc_bozze_locali',JSON.stringify(bl)); document.getElementById('loading-text').innerText="Generazione PDF..."; preparaSchermoPerPDF(); setTimeout(()=>{html2pdf().set(getPdfOptions(fn)).from(element).output('blob').then(pdfBlob=>{ripristinaSchermo(); document.getElementById('loading-overlay').style.display='none'; const file=new File([pdfBlob],fn,{type:'application/pdf'}); if(navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({title:'Rapporto TMC',text:'In allegato il rapporto.',files:[file]});}else{html2pdf().set(getPdfOptions(fn)).from(element).save();alert("Scaricato.");} }).catch(err=>{ripristinaSchermo(); document.getElementById('loading-overlay').style.display='none';});},100);}); }
-    function inviaEmailAutomaticamente() {
-        if(!validaCampiObbligatori()) return;
-        if(!navigator.onLine) return alert("📵 Offline!");
-        if(!controllaFirma()) return;
+    // ════════════════════════════════════════════════════════════
+    // GENERAZIONE PDF CON jsPDF (deterministico, identico su ogni device)
+    // ════════════════════════════════════════════════════════════
+    // Cache delle immagini banner/piede caricate come dataURL una sola volta
+    let _pdfBannerData = null, _pdfPiedeData = null, _pdfImgPromise = null;
+
+    function _caricaImmagine(url) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+                canvas.getContext('2d').drawImage(img, 0, 0);
+                try { resolve({ data: canvas.toDataURL('image/jpeg', 0.85), w: img.naturalWidth, h: img.naturalHeight }); }
+                catch(e) { resolve(null); }
+            };
+            img.onerror = () => resolve(null);
+            img.src = url;
+        });
+    }
+
+    async function _precaricaImmaginiPdf() {
+        if (_pdfImgPromise) return _pdfImgPromise;
+        _pdfImgPromise = (async () => {
+            _pdfBannerData = await _caricaImmagine('static/intestazione.jpg');
+            _pdfPiedeData  = await _caricaImmagine('static/piede.jpg');
+        })();
+        return _pdfImgPromise;
+    }
+
+    // Estrae tutti i dati del rapporto dai campi dell'A4
+    function _raccogliDatiRapporto() {
+        const ticket    = document.getElementById('n_rapporto_input').value || '';
+        const idUnivoco = document.getElementById('id_univoco_input').value || '';
+        const cliente   = document.getElementById('cliente_input').value || '';
+        const indirizzo = document.getElementById('indirizzo_input').value || '';
+        const macchina  = document.getElementById('macchina_input').value || '';
+        const email     = document.getElementById('email_input').value || '';
+        const tipoInt   = document.getElementById('tipo_int_hidden').value || 'P';
+        const mezzo     = document.querySelector('[name="mezzo_trasporto"]')?.value || '';
+        const descr     = document.getElementById('descrizione_input').value || '';
+        const respons   = document.querySelector('[name="nome_responsabile"]')?.value || '';
+        // Tecnici
+        const tecnici = [];
+        document.querySelectorAll('[name^="tecnico_"]').forEach(el => {
+            const v = (el.value || '').trim();
+            if (v) tecnici.push(v);
+        });
+        // Righe orari
+        const orari = [];
+        for (let i = 1; i <= rowCount; i++) {
+            const g = (n) => document.getElementsByName(`${n}_${i}`)[0]?.value || '';
+            const gc = (n) => document.getElementsByName(`${n}_${i}`)[0]?.checked || false;
+            // Salta righe vuote
+            if (!g('tec') && !g('d') && !g('va1') && !g('lm1') && !g('lp1') && !g('vr1')) continue;
+            orari.push({
+                data: g('d'), tecnico: g('tec'),
+                va1: g('va1'), va2: g('va2'),
+                lm1: g('lm1'), lm2: g('lm2'),
+                lp1: g('lp1'), lp2: g('lp2'),
+                vr1: g('vr1'), vr2: g('vr2'),
+                p: gc('p'), c: gc('c'), h: gc('h')
+            });
+        }
+        // Ricambi
+        const ricambi = [];
+        for (let i = 1; i <= ricCount; i++) {
+            const cod = document.getElementsByName(`rc_${i}`)[0]?.value || '';
+            const des = document.getElementsByName(`rd_${i}`)[0]?.value || '';
+            const qta = document.getElementsByName(`rq_${i}`)[0]?.value || '';
+            const unit= document.getElementsByName(`ru_${i}`)[0]?.value || '';
+            const tot = document.getElementsByName(`rt_${i}`)[0]?.value || '';
+            if (cod || des || qta) ricambi.push({ codice: cod, descrizione: des, qta, unit, tot });
+        }
+        const totaleMat = document.getElementById('gran-totale')?.value || '';
+        const totLavoro = document.getElementById('tot_lavoro_span')?.innerText || '';
+        const totPasti  = document.getElementById('tot_pch_span')?.innerText || '';
+        const totHotel  = document.getElementById('tot_hotel_span')?.innerText || '';
+        return {
+            ticket, idUnivoco, cliente, indirizzo, macchina, email, tipoInt, mezzo,
+            descr, respons, tecnici, orari, ricambi, totaleMat, totLavoro, totPasti, totHotel
+        };
+    }
+
+    // Genera il PDF e restituisce l'oggetto jsPDF
+    async function generaPdfRapporto() {
+        await _precaricaImmaginiPdf();
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+        const dati = _raccogliDatiRapporto();
+        const PAGE_W = 210, PAGE_H = 297;
+        const MARGIN_L = 8, MARGIN_R = 8, MARGIN_TOP = 8, MARGIN_BOT = 8;
+        const CONTENT_W = PAGE_W - MARGIN_L - MARGIN_R;
+        const BLUE = [0, 84, 166];
+        const LIGHT_BLUE = [240, 247, 255];
+        const GRAY = [120, 120, 120];
+
+        // ── HEADER ripetuto su ogni pagina ──────────────────────
+        function disegnaHeader() {
+            let y = MARGIN_TOP;
+            // Banner intestazione
+            if (_pdfBannerData) {
+                const ratio = _pdfBannerData.h / _pdfBannerData.w;
+                const bannerH = CONTENT_W * ratio;
+                doc.addImage(_pdfBannerData.data, 'JPEG', MARGIN_L, y, CONTENT_W, bannerH);
+                y += bannerH + 2;
+            }
+            // Titolo + tipo intervento
+            doc.setDrawColor(...BLUE);
+            doc.setLineWidth(0.5);
+            doc.line(MARGIN_L, y, PAGE_W - MARGIN_R, y);
+            y += 1.5;
+            doc.setTextColor(...BLUE);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(11);
+            doc.text(`RAPPORTO INTERVENTO N. ${dati.ticket || '—'}`, MARGIN_L + 2, y + 3);
+            // Tipo G/P a destra
+            const tipoText = dati.tipoInt === 'G' ? 'GRATUITO' : 'PAGAMENTO';
+            doc.setFontSize(9);
+            doc.setFillColor(...BLUE);
+            doc.setTextColor(255, 255, 255);
+            const tipoW = doc.getTextWidth(tipoText) + 6;
+            doc.roundedRect(PAGE_W - MARGIN_R - tipoW - 2, y - 1, tipoW, 6, 1, 1, 'F');
+            doc.text(tipoText, PAGE_W - MARGIN_R - tipoW/2 - 2, y + 3, { align: 'center' });
+            y += 5;
+            doc.setTextColor(100, 100, 100);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7);
+            doc.text(`ID FATTURAZIONE: ${dati.idUnivoco || '—'}`, MARGIN_L + 2, y + 3);
+            y += 4;
+            doc.setDrawColor(...BLUE);
+            doc.line(MARGIN_L, y, PAGE_W - MARGIN_R, y);
+            y += 3;
+
+            // ── BLOCCO CLIENTE/INTERVENTO (sempre ripetuto) ──
+            doc.setDrawColor(...BLUE);
+            doc.setLineWidth(0.3);
+            const boxStart = y;
+            const boxH = 32;
+            doc.roundedRect(MARGIN_L, y, CONTENT_W, boxH, 1, 1, 'S');
+            const colW = CONTENT_W / 2;
+            // Colonna sinistra: tecnici + mezzo
+            doc.setTextColor(...BLUE);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(6);
+            doc.text('TECNICO/I INCARICATO/I', MARGIN_L + 2, y + 3);
+            doc.setTextColor(0, 0, 0);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            const tecLines = dati.tecnici.length ? dati.tecnici.join(', ') : '—';
+            const tecWrap = doc.splitTextToSize(tecLines, colW - 4);
+            doc.text(tecWrap.slice(0, 3), MARGIN_L + 2, y + 7);
+            doc.setTextColor(...BLUE);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(6);
+            doc.text('MEZZO DI TRASPORTO', MARGIN_L + 2, y + 22);
+            doc.setTextColor(0, 0, 0);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.text(dati.mezzo || '—', MARGIN_L + 2, y + 26);
+            // Separatore verticale
+            doc.setDrawColor(220, 220, 220);
+            doc.line(MARGIN_L + colW, y + 2, MARGIN_L + colW, y + boxH - 2);
+            // Colonna destra: cliente + sede + macchina
+            const cx = MARGIN_L + colW + 3;
+            doc.setTextColor(...BLUE);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(6);
+            doc.text('CLIENTE', cx, y + 3);
+            doc.setTextColor(0, 0, 0);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(10);
+            const cliWrap = doc.splitTextToSize(dati.cliente || '—', colW - 6);
+            doc.text(cliWrap[0] || '—', cx, y + 7);
+            doc.setTextColor(...BLUE);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(6);
+            doc.text('SEDE INTERVENTO', cx, y + 12);
+            doc.setTextColor(0, 0, 0);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            const sedeWrap = doc.splitTextToSize(dati.indirizzo || '—', colW - 6);
+            doc.text(sedeWrap.slice(0, 2), cx, y + 16);
+            doc.setTextColor(...BLUE);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(6);
+            doc.text('MACCHINA / MATRICOLA', cx, y + 25);
+            doc.setTextColor(0, 0, 0);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.text(dati.macchina || '—', cx, y + 29);
+            return boxStart + boxH + 3;
+        }
+
+        // ── FOOTER ripetuto ─────────────────────────────────────
+        function disegnaFooter(pageNum, pageTot) {
+            if (_pdfPiedeData) {
+                const ratio = _pdfPiedeData.h / _pdfPiedeData.w;
+                const piedeW = CONTENT_W * 0.55;
+                const piedeH = piedeW * ratio;
+                doc.addImage(_pdfPiedeData.data, 'JPEG', (PAGE_W - piedeW) / 2, PAGE_H - MARGIN_BOT - piedeH, piedeW, piedeH);
+            }
+            // Numero pagina
+            doc.setTextColor(...GRAY);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7);
+            doc.text(`Pagina ${pageNum} di ${pageTot}`, PAGE_W - MARGIN_R, PAGE_H - 3, { align: 'right' });
+            doc.text(dati.ticket || '', MARGIN_L, PAGE_H - 3);
+        }
+
+        // ── CONTENUTO PRIMA PAGINA ──────────────────────────────
+        let yPos = disegnaHeader();
+
+        // Tabella orari
+        const orariBody = dati.orari.map(o => [
+            o.data, o.tecnico,
+            o.va1, o.va2, o.lm1, o.lm2, o.lp1, o.lp2, o.vr1, o.vr2,
+            (o.p?'P':'') + (o.c?'/C':'') + (o.h?'/H':'')
+        ]);
+        if (orariBody.length === 0) orariBody.push(['', '', '', '', '', '', '', '', '', '', '']);
+
+        doc.autoTable({
+            startY: yPos,
+            head: [
+                [
+                    { content: 'DATA', rowSpan: 2 },
+                    { content: 'TECNICO', rowSpan: 2 },
+                    { content: 'VIAGGIO (A)', colSpan: 2 },
+                    { content: 'LAVORO (M)', colSpan: 2 },
+                    { content: 'LAVORO (P)', colSpan: 2 },
+                    { content: 'VIAGGIO (R)', colSpan: 2 },
+                    { content: 'P/C/H', rowSpan: 2 }
+                ],
+                ['DA','A','DA','A','DA','A','DA','A']
+            ],
+            body: orariBody,
+            theme: 'grid',
+            styles: { fontSize: 7, halign: 'center', cellPadding: 1.2, lineColor: BLUE, lineWidth: 0.2 },
+            headStyles: { fillColor: LIGHT_BLUE, textColor: BLUE, fontStyle: 'bold', fontSize: 6 },
+            columnStyles: {
+                0: { cellWidth: 18 },
+                1: { cellWidth: 32, halign: 'left' },
+                10:{ cellWidth: 14 }
+            },
+            margin: { left: MARGIN_L, right: MARGIN_R, top: 0, bottom: PAGE_H - MARGIN_BOT - 15 },
+            didDrawPage: function() {
+                // Su pagine nuove ridisegna header
+                if (doc.internal.getNumberOfPages() > 1) {
+                    const pageBeforeRedraw = doc.internal.getCurrentPageInfo().pageNumber;
+                    // L'header è già stato disegnato all'inizio. Ridisegniamolo nelle pagine successive.
+                }
+            }
+        });
+        yPos = doc.lastAutoTable.finalY + 4;
+
+        // Descrizione (riquadro testo lungo, può occupare più pagine)
+        doc.setDrawColor(...BLUE);
+        doc.setLineWidth(0.3);
+        doc.setTextColor(...BLUE);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        // Verifica spazio
+        if (yPos > PAGE_H - MARGIN_BOT - 35) { doc.addPage(); yPos = disegnaHeader(); }
+        const descrTitleY = yPos;
+        doc.text('PROBLEMA SEGNALATO / LAVORO ESEGUITO', MARGIN_L + 2, yPos + 4);
+        yPos += 6;
+        // Calcolo altezza descrizione, eventualmente su più pagine
+        doc.setTextColor(0, 0, 0);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        const descrWrap = doc.splitTextToSize(dati.descr || '—', CONTENT_W - 6);
+        const lineH = 4;
+        let descrCursor = 0;
+        while (descrCursor < descrWrap.length) {
+            const spazioDisponibile = PAGE_H - MARGIN_BOT - 25 - yPos;
+            const righePagina = Math.floor(spazioDisponibile / lineH);
+            const fetta = descrWrap.slice(descrCursor, descrCursor + righePagina);
+            const boxH = fetta.length * lineH + 4;
+            doc.setDrawColor(...BLUE);
+            doc.roundedRect(MARGIN_L, yPos - 1, CONTENT_W, boxH, 1, 1, 'S');
+            doc.text(fetta, MARGIN_L + 3, yPos + 3);
+            descrCursor += righePagina;
+            yPos += boxH + 2;
+            if (descrCursor < descrWrap.length) {
+                doc.addPage();
+                yPos = disegnaHeader();
+                doc.setTextColor(...BLUE);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8);
+                doc.text('PROBLEMA SEGNALATO / LAVORO ESEGUITO (continua)', MARGIN_L + 2, yPos + 4);
+                yPos += 6;
+                doc.setTextColor(0, 0, 0);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(9);
+            }
+        }
+
+        // Ricambi (solo se ce ne sono)
+        if (dati.ricambi.length > 0) {
+            if (yPos > PAGE_H - MARGIN_BOT - 50) { doc.addPage(); yPos = disegnaHeader(); }
+            doc.autoTable({
+                startY: yPos + 2,
+                head: [['CODICE', 'RICAMBIO', 'Q.TÀ', 'UNIT. €', 'TOT. €']],
+                body: dati.ricambi.map(r => [r.codice, r.descrizione, r.qta, r.unit, r.tot]),
+                foot: dati.totaleMat ? [[{ content: 'TOTALE MATERIALI:', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } }, dati.totaleMat]] : [],
+                theme: 'grid',
+                styles: { fontSize: 8, halign: 'center', cellPadding: 1.5, lineColor: BLUE, lineWidth: 0.2 },
+                headStyles: { fillColor: LIGHT_BLUE, textColor: BLUE, fontStyle: 'bold', fontSize: 7 },
+                footStyles: { fillColor: [248, 251, 255], textColor: BLUE, fontStyle: 'bold' },
+                columnStyles: {
+                    0: { cellWidth: 25 },
+                    1: { cellWidth: 'auto', halign: 'left' },
+                    2: { cellWidth: 18 },
+                    3: { cellWidth: 22 },
+                    4: { cellWidth: 22 }
+                },
+                margin: { left: MARGIN_L, right: MARGIN_R, bottom: PAGE_H - MARGIN_BOT - 15 }
+            });
+            yPos = doc.lastAutoTable.finalY + 4;
+        }
+
+        // Riepilogo + firma — devono stare insieme nell'ultima pagina
+        const RIEPILOGO_H = 50;
+        if (yPos > PAGE_H - MARGIN_BOT - RIEPILOGO_H - 15) { doc.addPage(); yPos = disegnaHeader(); }
+        // Layout 2 colonne: riepilogo a sinistra, firma a destra
+        const colRiepW = CONTENT_W * 0.55;
+        const colFirmaW = CONTENT_W * 0.45 - 4;
+        // Riquadro riepilogo
+        doc.setDrawColor(...BLUE);
+        doc.roundedRect(MARGIN_L, yPos, colRiepW, RIEPILOGO_H, 1, 1, 'S');
+        doc.setTextColor(...BLUE);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.text('NOTE / RIEPILOGO SPESE', MARGIN_L + 2, yPos + 4);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(0, 0, 0);
+        let ry = yPos + 9;
+        doc.text(`ORE TOTALI: ${dati.totLavoro || '—'}`, MARGIN_L + 2, ry); ry += 6;
+        doc.text(`KM: —`, MARGIN_L + 2, ry); ry += 6;
+        doc.text(`PASTI: ${dati.totPasti || '—'}`, MARGIN_L + 2, ry); ry += 6;
+        doc.text(`HOTEL: ${dati.totHotel || '—'}`, MARGIN_L + 2, ry);
+        // Riquadro firma
+        const fx = MARGIN_L + colRiepW + 4;
+        doc.roundedRect(fx, yPos, colFirmaW, RIEPILOGO_H, 1, 1, 'S');
+        doc.setTextColor(...BLUE);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.text('RESPONSABILE', fx + 2, yPos + 4);
+        doc.setTextColor(0, 0, 0);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.text(dati.respons || '—', fx + colFirmaW/2, yPos + 9, { align: 'center' });
+        doc.setDrawColor(...BLUE);
+        doc.setLineWidth(0.1);
+        doc.line(fx + 2, yPos + 11, fx + colFirmaW - 2, yPos + 11);
+        doc.setTextColor(...BLUE);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.text('FIRMA CLIENTE', fx + 2, yPos + 15);
+        // Inserisci la firma
+        const sigData = localStorage.getItem('tmc_sig');
+        if (sigData) {
+            try { doc.addImage(sigData, 'PNG', fx + 4, yPos + 17, colFirmaW - 8, RIEPILOGO_H - 20); }
+            catch(e) {}
+        }
+        yPos += RIEPILOGO_H + 4;
+
+        // Footer e numerazione su tutte le pagine
+        const totPages = doc.internal.getNumberOfPages();
+        for (let p = 1; p <= totPages; p++) {
+            doc.setPage(p);
+            // Per le pagine successive alla prima, ridisegna l'header
+            if (p > 1) {
+                // L'header è già stato disegnato sopra durante la creazione, ok
+            }
+            disegnaFooter(p, totPages);
+        }
+        return doc;
+    }
+
+    // Wrapper: ritorna {blob, dataUri, filename}
+    async function generaPdfPacchetto(filenamePrefix) {
+        const doc = await generaPdfRapporto();
+        const idU = document.getElementById('id_univoco_input').value || 'NUOVO';
+        const cli = (document.getElementById('cliente_input').value || 'Cliente').replace(/[^A-Za-z0-9_-]/g, '_');
+        const filename = `${filenamePrefix || 'Rapporto'}_${idU}_${cli}.pdf`;
+        const blob = doc.output('blob');
+        const dataUri = doc.output('datauristring');
+        return { blob, dataUri, filename };
+    }
+
+    function salvaPDF() {
+        if (!validaCampiObbligatori()) return;
+        document.getElementById('loading-overlay').style.display = 'flex';
+        document.getElementById('loading-text').innerText = 'Generazione PDF...';
+        setTimeout(async () => {
+            try {
+                const pkg = await generaPdfPacchetto('Rapporto');
+                // Download via blob (funziona su tutti i browser desktop+mobile)
+                const url = URL.createObjectURL(pkg.blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = pkg.filename;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                document.getElementById('loading-overlay').style.display = 'none';
+            } catch (e) {
+                document.getElementById('loading-overlay').style.display = 'none';
+                alert('Errore nella generazione del PDF: ' + e.message);
+            }
+        }, 100);
+    }
+
+    async function condividiWhatsApp() {
+        if (!validaCampiObbligatori()) return;
+        if (!navigator.onLine) { alert("📵 Offline! Connettiti per aggiornare il calendario."); return; }
+        if (!controllaFirma()) return;
         generaIdUnivoco();
-        const element = document.getElementById('rapporto-foglio');
         const idU = document.getElementById('id_univoco_input').value;
         let tckVal = document.getElementById('n_rapporto_input').value;
-        if(!tckVal.startsWith("TCK-")) tckVal = "TCK-" + tckVal;
+        if (!tckVal.startsWith("TCK-")) tckVal = "TCK-" + tckVal;
         let inviati = JSON.parse(localStorage.getItem('tmc_ticket_inviati') || '[]');
-        if(inviati.includes(tckVal)) { if(!confirm("⚠️ Già inviato. Ri-inviare?")) return; }
+        if (inviati.includes(tckVal) && !confirm("⚠️ Già chiuso. Vuoi aggiornare?")) return;
         let testoCal = document.getElementById('descrizione_input').value;
-        if(testoCal.indexOf("RAPPORTO INVIATO") === -1) testoCal += generaRiepilogoCalendario(idU);
+        if (testoCal.indexOf("RAPPORTO INVIATO") === -1) testoCal += generaRiepilogoCalendario(idU);
+        document.getElementById('loading-overlay').style.display = 'flex';
+        document.getElementById('loading-text').innerText = "Aggiornamento Calendario...";
+        try {
+            await fetch(APP_SCRIPT_URL, {
+                method: "POST",
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action: "close_ticket", ticket: tckVal, updateCalendario: testoCal, pin: localStorage.getItem('tmc_auth_token') })
+            });
+            if (!inviati.includes(tckVal)) { inviati.push(tckVal); localStorage.setItem('tmc_ticket_inviati', JSON.stringify(inviati)); }
+            let bl = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').filter(b => b.tck !== tckVal);
+            localStorage.setItem('tmc_bozze_locali', JSON.stringify(bl));
+            document.getElementById('loading-text').innerText = "Generazione PDF...";
+            const pkg = await generaPdfPacchetto('Rapporto');
+            document.getElementById('loading-overlay').style.display = 'none';
+            const file = new File([pkg.blob], pkg.filename, { type: 'application/pdf' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({ title: 'Rapporto TMC', text: 'In allegato il rapporto.', files: [file] });
+            } else {
+                // Fallback: download diretto
+                const url = URL.createObjectURL(pkg.blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = pkg.filename;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                alert("PDF scaricato. Allegalo manualmente al tuo messaggio WhatsApp.");
+            }
+        } catch (e) {
+            document.getElementById('loading-overlay').style.display = 'none';
+            alert("Errore: " + e.message);
+        }
+    }
+
+    async function inviaEmailAutomaticamente() {
+        if (!validaCampiObbligatori()) return;
+        if (!navigator.onLine) return alert("📵 Offline!");
+        if (!controllaFirma()) return;
+        generaIdUnivoco();
+        const idU = document.getElementById('id_univoco_input').value;
+        let tckVal = document.getElementById('n_rapporto_input').value;
+        if (!tckVal.startsWith("TCK-")) tckVal = "TCK-" + tckVal;
+        let inviati = JSON.parse(localStorage.getItem('tmc_ticket_inviati') || '[]');
+        if (inviati.includes(tckVal) && !confirm("⚠️ Già inviato. Ri-inviare?")) return;
+        let testoCal = document.getElementById('descrizione_input').value;
+        if (testoCal.indexOf("RAPPORTO INVIATO") === -1) testoCal += generaRiepilogoCalendario(idU);
         const emailCliente = document.getElementById('email_input').value || '';
         const nomeCliente  = document.getElementById('cliente_input').value || 'Cliente';
         const tecnico      = document.getElementsByName('tecnico_1')[0]?.value || '';
+        const emailTecnico = localStorage.getItem('tmc_email_tecnico') || '';
         document.getElementById('loading-overlay').style.display = 'flex';
         document.getElementById('loading-text').innerText = "Generazione PDF...";
-        preparaSchermoPerPDF();
-        setTimeout(() => {
-            html2pdf().set(getPdfOptions(tckVal)).from(element).outputPdf('datauristring').then(pdfBase64 => {
-                ripristinaSchermo();
-                document.getElementById('loading-text').innerText = "Invio in corso...";
-                const emailTecnico = localStorage.getItem('tmc_email_tecnico') || '';
-                fetch(APP_SCRIPT_URL, {
-                    method: "POST",
-                    headers: {'Content-Type':'text/plain;charset=utf-8'},
-                    body: JSON.stringify({
-                        action: "send_email", pdfBase64,
-                        ticket: tckVal, updateCalendario: testoCal,
-                        pin: localStorage.getItem('tmc_auth_token'),
-                        filename: `Rapporto_${idU}.pdf`,
-                        nomeCliente, emailCliente, tecnico,
-                        emailTecnico   // ← copia di conferma al tecnico
-                    })
-                }).then(r => r.json()).then(data => {
-                    document.getElementById('loading-overlay').style.display = 'none';
-                    if(data.success) {
-                        // Usa la lista destinatari restituita dal server
-                        const dest = data.destinatari || 'tmcservice@tmcservice.it, info@tmcservice.it';
-                        mostraEsitoEmail(true,
-                            'Il rapporto è stato consegnato correttamente. Il calendario è stato aggiornato.',
-                            dest
-                        );
-                        if(!inviati.includes(tckVal)) {
-                            inviati.push(tckVal);
-                            localStorage.setItem('tmc_ticket_inviati', JSON.stringify(inviati));
-                        }
-                        let bl = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').filter(b => b.tck !== tckVal);
-                        localStorage.setItem('tmc_bozze_locali', JSON.stringify(bl));
-                        document.getElementById('er-btn-ok').onclick = () => { chiudiEsitoEmail(); nuovoRapporto(); };
-                    } else {
-                        mostraEsitoEmail(false,
-                            'Errore dal server: ' + (data.error || 'Sconosciuto') + '\n\nRiprova o contatta l\'ufficio.',
-                            null
-                        );
-                    }
-                }).catch(() => {
-                    document.getElementById('loading-overlay').style.display = 'none';
-                    mostraEsitoEmail(false,
-                        'Errore di rete durante l\'invio. Controlla la connessione e riprova.',
-                        null
-                    );
-                });
+        try {
+            const pkg = await generaPdfPacchetto('Rapporto');
+            document.getElementById('loading-text').innerText = "Invio in corso...";
+            const r = await fetch(APP_SCRIPT_URL, {
+                method: "POST",
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                    action: "send_email", pdfBase64: pkg.dataUri,
+                    ticket: tckVal, updateCalendario: testoCal,
+                    pin: localStorage.getItem('tmc_auth_token'),
+                    filename: pkg.filename, nomeCliente, emailCliente, tecnico, emailTecnico
+                })
             });
-        }, 500);
+            const data = await r.json();
+            document.getElementById('loading-overlay').style.display = 'none';
+            if (data.success) {
+                const dest = data.destinatari || 'tmcservice@tmcservice.it, info@tmcservice.it';
+                mostraEsitoEmail(true, 'Il rapporto è stato consegnato correttamente. Il calendario è stato aggiornato.', dest);
+                if (!inviati.includes(tckVal)) { inviati.push(tckVal); localStorage.setItem('tmc_ticket_inviati', JSON.stringify(inviati)); }
+                let bl = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').filter(b => b.tck !== tckVal);
+                localStorage.setItem('tmc_bozze_locali', JSON.stringify(bl));
+                document.getElementById('er-btn-ok').onclick = () => { chiudiEsitoEmail(); nuovoRapporto(); };
+            } else {
+                mostraEsitoEmail(false, 'Errore dal server: ' + (data.error || 'Sconosciuto') + '\n\nRiprova o contatta l\'ufficio.', null);
+            }
+        } catch (e) {
+            document.getElementById('loading-overlay').style.display = 'none';
+            mostraEsitoEmail(false, 'Errore di rete durante l\'invio. Controlla la connessione e riprova.', null);
+        }
     }
+    function generaRiepilogoCalendario(idUnivoco) { let r=`\n\n--- RAPPORTO INVIATO (${idUnivoco}) ---\n`; let lav=document.getElementById('tot_lavoro_span')?.innerText||""; if(lav) r+=`Ore: ${lav}\n`; let totP=0,totC=0,totH=0; for(let i=1;i<=rowCount;i++){ if(document.getElementsByName(`p_${i}`)[0]?.checked)totP++; if(document.getElementsByName(`c_${i}`)[0]?.checked)totC++; if(document.getElementsByName(`h_${i}`)[0]?.checked)totH++; } if(totP+totC>0)r+=`Pasti: ${totP+totC}\n`; if(totH>0)r+=`Hotel: ${totH}\n`; let ric=[]; for(let i=1;i<=ricCount;i++){let d=document.getElementsByName(`rd_${i}`)[0]?.value; let q=document.getElementsByName(`rq_${i}`)[0]?.value; if(d&&q&&parseFloat(q)>0)ric.push(`- ${q}x ${d.toUpperCase()}`);} if(ric.length>0)r+=`Ricambi:\n${ric.join('\n')}\n`; return r; }
     function setTipo(val) { document.getElementById('tipo_int_hidden').value=val; document.getElementById('box-G').className='tipo-box'+(val==='G'?' active':''); document.getElementById('box-P').className='tipo-box'+(val==='P'?' active':''); saveDraft(); }
     function addRow() { rowCount++; const tr=document.createElement('tr'); tr.innerHTML=`<td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data" name="d_${rowCount}" placeholder="Data" readonly style="font-size:9px; text-align:center; width:100%; pointer-events:none; border:none; background:transparent;"></td><td><input type="text" class="save-data caps" name="tec_${rowCount}" placeholder="Nome" style="font-size:8px; text-align:center; width:100%;"><div id="ore_riga_${rowCount}" style="font-size:7px; color:var(--tmc-blue); font-weight:bold; margin-top:2px;"></div></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="va1_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="va2_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="lm1_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="lm2_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="lp1_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="lp2_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="vr1_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="vr2_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><div class="pch-row-a4" style="pointer-events:none;">P<input type="checkbox" class="save-data" name="p_${rowCount}">C<input type="checkbox" class="save-data" name="c_${rowCount}">H<input type="checkbox" class="save-data" name="h_${rowCount}"></div></td><td class="no-print"><button type="button" onclick="eliminaRigaOre(this)" style="background:#ff4444; color:white; border:none; border-radius:3px; padding:3px 6px; font-weight:bold; cursor:pointer;">X</button></td>`; document.getElementById('table-body').appendChild(tr); attachListeners(); }
     function eliminaRigaOre(btn) { if(!confirm("Eliminare questa riga?"))return; btn.closest('tr').remove(); rinumeraRigheOre(); calc(); }
@@ -1770,9 +2485,7 @@
     function closeSignature(save) { if(save){ const url=canvas.toDataURL(); document.getElementById('sig-image').src=url; document.getElementById('sig-image').style.display='block'; document.getElementById('placeholder-firma').style.display='none'; localStorage.setItem('tmc_sig',url); const wb=document.getElementById('wiz-sigbox'); if(wb){ wb.className='sig-area signed'; wb.innerHTML='<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 24 Q10 14 16 20 Q22 26 28 8"/><line x1="4" y1="28" x2="28" y2="28"/></svg><span>Firma acquisita ✓</span>'; } } document.getElementById('signature-overlay').style.display='none'; }
     function clearSignature(){ctx.clearRect(0,0,canvas.width,canvas.height);}
     function getPos(e){const r=canvas.getBoundingClientRect(); const cx=e.touches?e.touches[0].clientX:e.clientX; const cy=e.touches?e.touches[0].clientY:e.clientY; return{x:cx-r.left,y:cy-r.top};}
-    canvas.addEventListener('touchstart',e=>{drawing=true;ctx.beginPath();const p=getPos(e);ctx.moveTo(p.x,p.y);e.preventDefault();});
-    canvas.addEventListener('touchmove',e=>{if(!drawing)return;const p=getPos(e);ctx.lineTo(p.x,p.y);ctx.stroke();e.preventDefault();});
-    canvas.addEventListener('touchend',()=>drawing=false);
+    // (listener canvas spostati dentro window.onload)
     function saveDraft(){const data={};document.querySelectorAll('.save-data').forEach(el=>data[el.name]=(el.type==='checkbox'?el.checked:el.value));localStorage.setItem('tmc_bozza',JSON.stringify(data));localStorage.setItem('tmc_counts',JSON.stringify({r:rowCount,ric:ricCount}));}
     function loadDraft(){const counts=JSON.parse(localStorage.getItem('tmc_counts')||'{"r":1,"ric":1}');document.getElementById('table-body').innerHTML="";document.getElementById('ricambi-body').innerHTML="";rowCount=0;ricCount=0;for(let i=0;i<counts.r;i++)addRow();for(let i=0;i<counts.ric;i++)addRicambio();const saved=JSON.parse(localStorage.getItem('tmc_bozza')||'{}');if(!saved['descrizione']||saved['descrizione'].trim()==="")saved['descrizione']=FRASE_SICUREZZA;let tCount=1;while(saved['tecnico_'+tCount]!==undefined){if(tCount>1)aggiungiRigaTecnico(saved['tecnico_'+tCount],false);else document.getElementsByName('tecnico_1')[0].value=(saved['tecnico_1']||"").toUpperCase();tCount++;}document.querySelectorAll('.save-data').forEach(el=>{if(saved[el.name]!==undefined)el.type==='checkbox'?el.checked=saved[el.name]:el.value=saved[el.name];});const sig=localStorage.getItem('tmc_sig');if(sig){document.getElementById('sig-image').src=sig;document.getElementById('sig-image').style.display='block';document.getElementById('placeholder-firma').style.display='none';}else{document.getElementById('sig-image').src="";document.getElementById('sig-image').style.display='none';document.getElementById('placeholder-firma').style.display='inline';}setTipo(saved['tipo_int']||'P');
     // Ripristina campi wizard
@@ -1797,11 +2510,18 @@
     calc();}
     function attachListeners(){document.querySelectorAll('.save-data').forEach(el=>{el.oninput=calc;});}
     function nuovoRapporto(){if(confirm("Cancellare tutto e iniziare un nuovo rapporto?")){localStorage.removeItem('tmc_bozza');localStorage.removeItem('tmc_counts');localStorage.removeItem('tmc_sig');location.reload();}}
-    window.addEventListener('beforeprint',preparaSchermoPerPDF);
-    window.addEventListener('afterprint',ripristinaSchermo);
+    // (Listener stampa rimossi: il PDF è ora generato direttamente da jsPDF, non più via window.print)
     // Init data wizard al giorno corrente
     // (w_data rimosso: ora le date sono gestite per giornata in wizGiornate)
     window.onload = function(){
+        // Inizializza canvas firma (deve essere dentro onload per essere sicuro che il DOM esista)
+        canvas = document.getElementById('canvas-fullscreen');
+        if (canvas) {
+            ctx = canvas.getContext('2d');
+            canvas.addEventListener('touchstart', e => { drawing=true; ctx.beginPath(); const p=getPos(e); ctx.moveTo(p.x,p.y); e.preventDefault(); }, { passive: false });
+            canvas.addEventListener('touchmove', e => { if(!drawing)return; const p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); e.preventDefault(); }, { passive: false });
+            canvas.addEventListener('touchend', () => drawing=false);
+        }
         const savedPin = localStorage.getItem('tmc_auth_token');
         if(savedPin && savedPin !== '') sbloccaApp();
         else { document.getElementById('login-overlay').style.display = 'flex'; document.getElementById('app-content').style.display = 'none'; }
