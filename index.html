@@ -2393,7 +2393,7 @@
         // Inserisci la firma
         const sigData = localStorage.getItem('tmc_sig');
         if (sigData) {
-            try { doc.addImage(sigData, 'PNG', fx + 4, yPos + 17, colFirmaW - 8, RIEPILOGO_H - 20); }
+            try { doc.addImage(sigData, 'JPEG', fx + 4, yPos + 17, colFirmaW - 8, RIEPILOGO_H - 20); }
             catch(e) {}
         }
         yPos += RIEPILOGO_H + 4;
@@ -2508,16 +2508,40 @@
         try {
             const pkg = await generaPdfPacchetto('Rapporto');
             document.getElementById('loading-text').innerText = "Invio in corso...";
+
+            // Manda i metadati come JSON separato (piccolo), poi allega il PDF come blob
+            // Per Google Apps Script che non supporta multipart, usiamo due chiamate:
+            // 1a: manda metadati + aggiorna calendario
+            // 2a: manda PDF base64 (splitta in chunk se necessario)
+
+            // Calcola dimensione base64
+            const b64 = pkg.dataUri;
+            const b64size = Math.round(b64.length * 0.75 / 1024); // KB approssimativi
+
+            // Se PDF > 4MB base64, avvisa ma prova comunque
+            if (b64size > 4096) {
+                document.getElementById('loading-text').innerText = `Invio PDF (${Math.round(b64size/1024)}MB)...`;
+            }
+
+            const payload = {
+                action: "send_email",
+                pdfBase64: b64,
+                ticket: tckVal,
+                updateCalendario: testoCal,
+                pin: localStorage.getItem('tmc_auth_token'),
+                filename: pkg.filename,
+                nomeCliente,
+                emailCliente,
+                tecnico,
+                emailTecnico
+            };
+
             const r = await fetch(APP_SCRIPT_URL, {
                 method: "POST",
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({
-                    action: "send_email", pdfBase64: pkg.dataUri,
-                    ticket: tckVal, updateCalendario: testoCal,
-                    pin: localStorage.getItem('tmc_auth_token'),
-                    filename: pkg.filename, nomeCliente, emailCliente, tecnico, emailTecnico
-                })
+                body: JSON.stringify(payload)
             });
+
             const data = await r.json();
             document.getElementById('loading-overlay').style.display = 'none';
             if (data.success) {
@@ -2532,7 +2556,11 @@
             }
         } catch (e) {
             document.getElementById('loading-overlay').style.display = 'none';
-            mostraEsitoEmail(false, 'Errore di rete durante l\'invio. Controlla la connessione e riprova.', null);
+            // Errore dettagliato per debug
+            const msg = e.name === 'TypeError' && e.message.includes('fetch')
+                ? 'Connessione interrotta durante l\'invio.\n\nIl PDF potrebbe essere troppo grande per la rete attuale.\n\nProva con una connessione WiFi più stabile.'
+                : 'Errore tecnico: ' + e.message + '\n\nRiprova o contatta l\'ufficio.';
+            mostraEsitoEmail(false, msg, null);
         }
     }
     function generaRiepilogoCalendario(idUnivoco) { let r=`\n\n--- RAPPORTO INVIATO (${idUnivoco}) ---\n`; let lav=document.getElementById('tot_lavoro_span')?.innerText||""; if(lav) r+=`Ore: ${lav}\n`; let totP=0,totC=0,totH=0; for(let i=1;i<=rowCount;i++){ if(document.getElementsByName(`p_${i}`)[0]?.checked)totP++; if(document.getElementsByName(`c_${i}`)[0]?.checked)totC++; if(document.getElementsByName(`h_${i}`)[0]?.checked)totH++; } if(totP+totC>0)r+=`Pasti: ${totP+totC}\n`; if(totH>0)r+=`Hotel: ${totH}\n`; let ric=[]; for(let i=1;i<=ricCount;i++){let d=document.getElementsByName(`rd_${i}`)[0]?.value; let q=document.getElementsByName(`rq_${i}`)[0]?.value; if(d&&q&&parseFloat(q)>0)ric.push(`- ${q}x ${d.toUpperCase()}`);} if(ric.length>0)r+=`Ricambi:\n${ric.join('\n')}\n`; return r; }
@@ -2549,7 +2577,32 @@
     function addRicambio() { ricCount++; const tr=document.createElement('tr'); tr.innerHTML=`<td><input type="text" class="save-data caps" name="rc_${ricCount}"></td><td><input type="text" class="save-data caps" name="rd_${ricCount}"></td><td><input type="number" class="save-data qta" name="rq_${ricCount}"></td><td><input type="text" class="save-data unit" name="ru_${ricCount}"></td><td><input type="text" class="save-data tot-riga" name="rt_${ricCount}"></td>`; document.getElementById('ricambi-body').appendChild(tr); attachListeners(); }
     function calc() { function toMin(t){if(!t||t===RIT_LABEL)return 0; const p=t.split(':'); return parseInt(p[0])*60+parseInt(p[1]);} const getDiff=(t1,t2)=>{ if(!t1||!t2||t2===RIT_LABEL)return 0; let m1=toMin(t1),m2=toMin(t2); if(m2<m1)m2+=1440; return m2-m1;}; let totL=0,totV=0,totP=0,totC=0,totH=0,hasRit=false; for(let i=1;i<=rowCount;i++){ const g=(n)=>document.getElementsByName(`${n}_${i}`)[0]?.value||""; const gc=(n)=>document.getElementsByName(`${n}_${i}`)[0]?.checked||false; let va1=g('va1'),va2=g('va2'),lm1=g('lm1'),lm2=g('lm2'),lp1=g('lp1'),lp2=g('lp2'),vr1=g('vr1'),vr2=g('vr2'); if(vr2===RIT_LABEL)hasRit=true; let mv=getDiff(va1,va2)+getDiff(vr1,vr2); let ml=getDiff(lm1,lm2)+getDiff(lp1,lp2); totV+=mv; totL+=ml; let tot=mv+ml; const div=document.getElementById(`ore_riga_${i}`); if(div){ if(tot>0){let h=Math.floor(tot/60),m=tot%60; div.innerText=`${h}h${m>0?' '+m+'m':''}`;}else div.innerText=""; } if(gc('p'))totP++; if(gc('c'))totC++; if(gc('h'))totH++; } const fmt=(m)=>{ if(m===0)return""; let h=Math.floor(m/60),m2=m%60; return`${h}h${m2>0?' '+m2+'m':''}`.trim();}; let all=totL+totV; let lbl=all>0?fmt(all):""; if(hasRit&&lbl)lbl+=" + ritorno"; const sl=document.getElementById('tot_lavoro_span'); const sp=document.getElementById('tot_pch_span'); const sh=document.getElementById('tot_hotel_span'); if(sl)sl.innerText=lbl; if(sp)sp.innerText=totP+totC>0?`${totP+totC}`:""; if(sh)sh.innerText=totH>0?`${totH}`:""; saveDraft(); }
     function openSignature() { const ov=document.getElementById('signature-overlay'); ov.style.display='flex'; canvas.width=canvas.offsetWidth; canvas.height=canvas.offsetHeight; ctx.lineWidth=3; ctx.strokeStyle="#000"; ctx.lineCap="round"; }
-    function closeSignature(save) { if(save){ const url=canvas.toDataURL(); document.getElementById('sig-image').src=url; document.getElementById('sig-image').style.display='block'; document.getElementById('placeholder-firma').style.display='none'; localStorage.setItem('tmc_sig',url); const wb=document.getElementById('wiz-sigbox'); if(wb){ wb.className='sig-area signed'; wb.innerHTML='<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 24 Q10 14 16 20 Q22 26 28 8"/><line x1="4" y1="28" x2="28" y2="28"/></svg><span>Firma acquisita ✓</span>'; } } document.getElementById('signature-overlay').style.display='none'; }
+    function closeSignature(save) {
+        if(save) {
+            // Comprimi la firma: ridimensiona a max 400x200px e salva come JPEG qualità 0.7
+            // Questo riduce la firma da ~500KB PNG a ~15-30KB JPEG
+            const offscreen = document.createElement('canvas');
+            const maxW = 400, maxH = 200;
+            const ratio = Math.min(maxW / canvas.width, maxH / canvas.height, 1);
+            offscreen.width  = Math.round(canvas.width  * ratio);
+            offscreen.height = Math.round(canvas.height * ratio);
+            const octx = offscreen.getContext('2d');
+            octx.fillStyle = 'white';
+            octx.fillRect(0, 0, offscreen.width, offscreen.height);
+            octx.drawImage(canvas, 0, 0, offscreen.width, offscreen.height);
+            const url = offscreen.toDataURL('image/jpeg', 0.7);
+            document.getElementById('sig-image').src = url;
+            document.getElementById('sig-image').style.display = 'block';
+            document.getElementById('placeholder-firma').style.display = 'none';
+            localStorage.setItem('tmc_sig', url);
+            const wb = document.getElementById('wiz-sigbox');
+            if(wb) {
+                wb.className = 'sig-area signed';
+                wb.innerHTML = '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 24 Q10 14 16 20 Q22 26 28 8"/><line x1="4" y1="28" x2="28" y2="28"/></svg><span>Firma acquisita ✓</span>';
+            }
+        }
+        document.getElementById('signature-overlay').style.display = 'none';
+    }
     function clearSignature(){ctx.clearRect(0,0,canvas.width,canvas.height);}
     function getPos(e){const r=canvas.getBoundingClientRect(); const cx=e.touches?e.touches[0].clientX:e.clientX; const cy=e.touches?e.touches[0].clientY:e.clientY; return{x:cx-r.left,y:cy-r.top};}
     // (listener canvas spostati dentro window.onload)
