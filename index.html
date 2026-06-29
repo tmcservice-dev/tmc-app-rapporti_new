@@ -2031,7 +2031,7 @@
     // ════════════════════════════════════════════════════════════
     // GENERAZIONE PDF CON jsPDF (deterministico, identico su ogni device)
     // ════════════════════════════════════════════════════════════
-    // GENERAZIONE PDF — layout ottimizzato, testo vero non immagine
+    // GENERAZIONE PDF — una pagina, layout compatto
     // ════════════════════════════════════════════════════════════
     let _pdfBannerData = null, _pdfPiedeData = null, _pdfImgPromise = null;
 
@@ -2043,7 +2043,7 @@
                 const c = document.createElement('canvas');
                 c.width = img.naturalWidth; c.height = img.naturalHeight;
                 c.getContext('2d').drawImage(img, 0, 0);
-                try { resolve({ data: c.toDataURL('image/jpeg', 0.9), w: img.naturalWidth, h: img.naturalHeight }); }
+                try { resolve({ data: c.toDataURL('image/jpeg', 0.92), w: img.naturalWidth, h: img.naturalHeight }); }
                 catch(e) { resolve(null); }
             };
             img.onerror = () => resolve(null);
@@ -2060,18 +2060,14 @@
         return _pdfImgPromise;
     }
 
+    // Rimuove caratteri non Latin-1 che jsPDF non gestisce
+    function _san(s) {
+        return (s || '').replace(/[^\x00-\xFF]/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
     function _raccogliDatiRapporto() {
-        const g  = id => document.getElementById(id);
-        const gn = name => document.getElementsByName(name)[0]?.value || '';
-        const ticket    = g('n_rapporto_input')?.value || '';
-        const idUnivoco = g('id_univoco_input')?.value || '';
-        const cliente   = g('cliente_input')?.value || '';
-        const indirizzo = g('indirizzo_input')?.value || '';
-        const macchina  = g('macchina_input')?.value || '';
-        const tipoInt   = g('tipo_int_hidden')?.value || 'P';
-        const mezzo     = gn('mezzo_trasporto');
-        const descr     = g('descrizione_input')?.value || '';
-        const respons   = gn('nome_responsabile');
+        const gi = id => document.getElementById(id);
+        const gn = n  => document.getElementsByName(n)[0]?.value || '';
         const tecnici = [];
         document.querySelectorAll('[name^="tecnico_"]').forEach(el => { if(el.value.trim()) tecnici.push(el.value.trim()); });
         const orari = [];
@@ -2088,15 +2084,23 @@
             const qta = document.getElementsByName(`rq_${i}`)[0]?.value || '';
             const unit= document.getElementsByName(`ru_${i}`)[0]?.value || '';
             const tot = document.getElementsByName(`rt_${i}`)[0]?.value || '';
-            if (cod || des || qta) ricambi.push({ codice:cod, descrizione:des, qta, unit, tot });
+            if (des.trim() || cod.trim()) ricambi.push({ codice:cod, descrizione:des, qta, unit, tot });
         }
         return {
-            ticket, idUnivoco, cliente, indirizzo, macchina, tipoInt, mezzo,
-            descr, respons, tecnici, orari, ricambi,
-            totaleMat: g('gran-totale')?.value || '',
-            totLavoro: g('tot_lavoro_span')?.innerText || '',
-            totPasti:  g('tot_pch_span')?.innerText || '',
-            totHotel:  g('tot_hotel_span')?.innerText || ''
+            ticket:    gi('n_rapporto_input')?.value || '',
+            idUnivoco: gi('id_univoco_input')?.value || '',
+            cliente:   gi('cliente_input')?.value || '',
+            indirizzo: gi('indirizzo_input')?.value || '',
+            macchina:  gi('macchina_input')?.value || '',
+            tipoInt:   gi('tipo_int_hidden')?.value || 'P',
+            mezzo:     gn('mezzo_trasporto'),
+            descr:     gi('descrizione_input')?.value || '',
+            respons:   gn('nome_responsabile'),
+            tecnici, orari, ricambi,
+            totaleMat: gi('gran-totale')?.value || '',
+            totLavoro: gi('tot_lavoro_span')?.innerText || '',
+            totPasti:  gi('tot_pch_span')?.innerText || '',
+            totHotel:  gi('tot_hotel_span')?.innerText || ''
         };
     }
 
@@ -2106,275 +2110,205 @@
         const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
         const d = _raccogliDatiRapporto();
 
-        // ── Costanti layout ────────────────────────────────────
-        const PW = 210, PH = 297;
-        const ML = 10, MR = 10, MT = 6, MB = 18;
-        const CW = PW - ML - MR;   // 190mm larghezza contenuto
-        const BLUE   = [0, 84, 166];
-        const LBLUE  = [240, 247, 255];
-        const GRAY   = [100, 100, 100];
-        const BLACK  = [30, 30, 30];
+        const PW=210, PH=297, ML=8, MR=8, CW=194;
+        const BLUE=[0,84,166], LBLUE=[240,247,255], GRAY=[120,120,120], BLACK=[20,20,20];
 
-        // Altezza piede riservata
-        const PIEDE_H = _pdfPiedeData ? (CW * 0.5 * _pdfPiedeData.h / _pdfPiedeData.w) + 4 : 10;
-        const BOTTOM  = PH - MB - PIEDE_H;   // y minima prima del piede
+        // ── Misura altezze fisse ─────────────────────────────────
+        const bannerH = _pdfBannerData ? (CW * _pdfBannerData.h / _pdfBannerData.w) : 0;
+        const piedeW  = CW * 0.52;
+        const piedeH  = _pdfPiedeData  ? (piedeW * _pdfPiedeData.h  / _pdfPiedeData.w)  : 8;
 
-        let pageNum = 0;
+        // Stima spazio occupato dagli elementi fissi
+        const ALT_BANNER   = bannerH + 2;
+        const ALT_TITOLO   = 14;          // titolo + id fatturazione
+        const ALT_BOX_CLI  = 30;          // box tecnici/cliente
+        const ALT_TAB_ORARI = 7 + (d.orari.length || 1) * 6.5; // header 2 righe + righe
+        const ALT_DESCR_LBL = 7;
+        const ALT_RIEPILOGO = 44;         // note + firma
+        const ALT_PIEDE     = piedeH + 6;
+        const ALT_RICAMBI   = d.ricambi.length > 0 ? (10 + d.ricambi.length * 6) : 0;
+        const MARGINI_VARI  = 16;         // spazi tra sezioni
 
-        // ── Helpers ────────────────────────────────────────────
-        const txt = (t, x, y, opts) => doc.text(_sanText(t), x, y, opts || {});
+        const ALT_FISSA = ALT_BANNER + ALT_TITOLO + ALT_BOX_CLI + ALT_TAB_ORARI +
+                          ALT_DESCR_LBL + ALT_RIEPILOGO + ALT_PIEDE + ALT_RICAMBI + MARGINI_VARI;
 
-        function _sanText(s) {
-            // Rimuove caratteri non-latin1 che jsPDF non riesce a codificare
-            return (s || '').replace(/[^\x00-\xFF]/g, '?');
+        // Spazio disponibile per la descrizione
+        const DESCR_AVAIL = Math.max(20, PH - ALT_FISSA);
+
+        // Font size della descrizione: riduce se serve
+        let descrFontSize = 8.5;
+        let descrLineH    = 4.2;
+        // Calcola quante righe di testo a font normale
+        doc.setFontSize(descrFontSize);
+        const descrSan = _san(d.descr || '—');
+        let descrLines = doc.splitTextToSize(descrSan, CW-6);
+        let descrH = descrLines.length * descrLineH + 5;
+
+        // Se non entra, riduci font fino a 7
+        while (descrH > DESCR_AVAIL && descrFontSize > 7) {
+            descrFontSize -= 0.3;
+            descrLineH    -= 0.1;
+            doc.setFontSize(descrFontSize);
+            descrLines = doc.splitTextToSize(descrSan, CW-6);
+            descrH = descrLines.length * descrLineH + 5;
         }
 
-        function nuovaPagina() {
-            if (pageNum > 0) doc.addPage();
-            pageNum++;
+        // ── Disegna pagina ───────────────────────────────────────
+        let y = 5;
 
-            let y = MT;
-
-            // Banner intestazione
-            if (_pdfBannerData) {
-                const bh = CW * _pdfBannerData.h / _pdfBannerData.w;
-                doc.addImage(_pdfBannerData.data, 'JPEG', ML, y, CW, bh);
-                y += bh + 2;
-            }
-
-            // Linea + titolo rapporto
-            doc.setDrawColor(...BLUE); doc.setLineWidth(0.6);
-            doc.line(ML, y, PW-MR, y); y += 4;
-
-            doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(...BLUE);
-            txt(`RAPPORTO INTERVENTO N. ${d.ticket || '—'}`, ML+2, y);
-
-            // Badge GRATUITO / PAGAMENTO
-            const badgeTxt = d.tipoInt === 'G' ? 'GRATUITO' : 'PAGAMENTO';
-            doc.setFontSize(8);
-            const bw = doc.getTextWidth(badgeTxt) + 6;
-            doc.setFillColor(...BLUE);
-            doc.roundedRect(PW-MR-bw, y-4, bw, 6, 1, 1, 'F');
-            doc.setTextColor(255,255,255);
-            txt(badgeTxt, PW-MR-bw/2, y, { align:'center' });
-            y += 3;
-
-            // ID fatturazione
-            doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(...GRAY);
-            txt(`ID FATTURAZIONE: ${d.idUnivoco || '—'}`, ML+2, y); y += 2;
-
-            doc.setDrawColor(...BLUE); doc.setLineWidth(0.4);
-            doc.line(ML, y, PW-MR, y); y += 3;
-
-            // ── Box cliente/tecnico ──────────────────────────
-            const colL = CW / 2 - 2;
-            const colR = CW / 2 - 2;
-            const colLx = ML, colRx = ML + CW/2 + 2;
-            const BOX_H = 34;
-
-            doc.setDrawColor(...BLUE); doc.setLineWidth(0.3);
-            doc.roundedRect(colLx, y, colL, BOX_H, 1, 1, 'S');
-            doc.roundedRect(colRx, y, colR, BOX_H, 1, 1, 'S');
-
-            // Colonna sinistra — tecnici + mezzo
-            const _lbl = (t, x, yy) => { doc.setFont('helvetica','bold'); doc.setFontSize(6); doc.setTextColor(...BLUE); txt(t, x, yy); };
-            const _val = (t, x, yy, sz) => { doc.setFont('helvetica', sz>10?'bold':'normal'); doc.setFontSize(sz||9); doc.setTextColor(...BLACK); txt(t, x, yy); };
-
-            _lbl('TECNICO/I INCARICATO/I', colLx+2, y+4);
-            const tecLine = d.tecnici.join(', ') || '—';
-            doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...BLACK);
-            const tecWrap = doc.splitTextToSize(_sanText(tecLine), colL-4);
-            doc.text(tecWrap.slice(0,3), colLx+2, y+8);
-
-            _lbl('MEZZO DI TRASPORTO', colLx+2, y+24);
-            _val(d.mezzo || '—', colLx+2, y+28, 9);
-
-            // Colonna destra — cliente + sede + macchina
-            _lbl('CLIENTE', colRx+2, y+4);
-            doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...BLACK);
-            const cliWrap = doc.splitTextToSize(_sanText(d.cliente || '—'), colR-4);
-            doc.text(cliWrap[0], colRx+2, y+9);
-
-            _lbl('SEDE INTERVENTO', colRx+2, y+14);
-            doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...BLACK);
-            const sedeWrap = doc.splitTextToSize(_sanText(d.indirizzo || '—'), colR-4);
-            doc.text(sedeWrap.slice(0,2), colRx+2, y+18);
-
-            _lbl('MACCHINA / MATRICOLA', colRx+2, y+27);
-            _val(d.macchina || '—', colRx+2, y+31, 9);
-
-            return y + BOX_H + 3;
+        // Banner
+        if (_pdfBannerData) {
+            doc.addImage(_pdfBannerData.data, 'JPEG', ML, y, CW, bannerH);
+            y += bannerH + 2;
         }
 
-        function disegnaFooter() {
-            const totPg = doc.internal.getNumberOfPages();
-            for (let p = 1; p <= totPg; p++) {
-                doc.setPage(p);
-                // Piede immagine
-                if (_pdfPiedeData) {
-                    const pw = CW * 0.5;
-                    const ph = pw * _pdfPiedeData.h / _pdfPiedeData.w;
-                    doc.addImage(_pdfPiedeData.data, 'JPEG', (PW-pw)/2, PH-MB-ph+2, pw, ph);
-                }
-                doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(...GRAY);
-                txt(d.ticket || '', ML, PH-4);
-                txt(`Pagina ${p} di ${totPg}`, PW-MR, PH-4, { align:'right' });
-            }
-        }
+        // Titolo + badge
+        doc.setDrawColor(...BLUE); doc.setLineWidth(0.6);
+        doc.line(ML, y, PW-MR, y); y += 4;
+        doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...BLUE);
+        doc.text(_san(`RAPPORTO INTERVENTO N. ${d.ticket || '—'}`), ML+2, y);
+        const badgeTxt = d.tipoInt==='G' ? 'GRATUITO' : 'PAGAMENTO';
+        doc.setFontSize(8);
+        const bw = doc.getTextWidth(badgeTxt)+6;
+        doc.setFillColor(...BLUE); doc.roundedRect(PW-MR-bw, y-4, bw, 6, 1, 1, 'F');
+        doc.setTextColor(255,255,255); doc.text(badgeTxt, PW-MR-bw/2, y, {align:'center'}); y += 3;
+        doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(...GRAY);
+        doc.text(_san(`ID FATTURAZIONE: ${d.idUnivoco||'—'}`), ML+2, y); y += 2;
+        doc.setDrawColor(...BLUE); doc.setLineWidth(0.4);
+        doc.line(ML, y, PW-MR, y); y += 3;
 
-        function checkPageBreak(y, needed) {
-            if (y + needed > BOTTOM) {
-                return nuovaPagina();
-            }
-            return y;
-        }
+        // Box cliente/tecnico
+        const cHalf = CW/2-1;
+        doc.setDrawColor(...BLUE); doc.setLineWidth(0.25);
+        doc.roundedRect(ML, y, cHalf, ALT_BOX_CLI, 1, 1, 'S');
+        doc.roundedRect(ML+cHalf+2, y, cHalf, ALT_BOX_CLI, 1, 1, 'S');
+        const lbl = (t,x,yy) => { doc.setFont('helvetica','bold'); doc.setFontSize(6); doc.setTextColor(...BLUE); doc.text(t,x,yy); };
+        const val = (t,x,yy,sz,bold) => { doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(sz||9); doc.setTextColor(...BLACK); doc.text(_san(t),x,yy); };
+        lbl('TECNICO/I INCARICATO/I', ML+2, y+4);
+        doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...BLACK);
+        const tecWrap = doc.splitTextToSize(_san(d.tecnici.join(', ')||'—'), cHalf-4);
+        doc.text(tecWrap.slice(0,3), ML+2, y+8);
+        lbl('MEZZO DI TRASPORTO', ML+2, y+22);
+        val(d.mezzo||'—', ML+2, y+26, 8, false);
+        const rx = ML+cHalf+4;
+        lbl('CLIENTE', rx, y+4);
+        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...BLACK);
+        doc.text(_san(d.cliente||'—'), rx, y+9);
+        lbl('SEDE INTERVENTO', rx, y+14);
+        doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...BLACK);
+        const sedeWrap = doc.splitTextToSize(_san(d.indirizzo||'—'), cHalf-4);
+        doc.text(sedeWrap.slice(0,2), rx, y+18);
+        lbl('MACCHINA / MATRICOLA', rx, y+24);
+        val(d.macchina||'—', rx, y+28, 8, false);
+        y += ALT_BOX_CLI + 2;
 
-        // ── PRIMA PAGINA ───────────────────────────────────────
-        let y = nuovaPagina();
-
-        // ── TABELLA ORARI ──────────────────────────────────────
-        const orariBody = d.orari.map(o => [
-            o.data, o.tecnico,
+        // Tabella orari
+        const orariBody = (d.orari.length ? d.orari : [{}]).map(o => [
+            o.data||'', o.tecnico||'',
             o.va1||'', o.va2||'', o.lm1||'', o.lm2||'',
             o.lp1||'', o.lp2||'', o.vr1||'', o.vr2||'',
-            (o.p?'P':'')+(o.c?'/C':'')+(o.h?'/H':'') || '—'
+            [(o.p?'P':''),(o.c?'C':''),(o.h?'H':'')].filter(Boolean).join('/')||''
         ]);
-        if (!orariBody.length) orariBody.push(Array(11).fill(''));
-
         doc.autoTable({
             startY: y,
-            head: [
-                [
-                    { content:'DATA', rowSpan:2, styles:{halign:'center'} },
-                    { content:'TECNICO', rowSpan:2 },
-                    { content:'VIAGGIO (A)', colSpan:2, styles:{halign:'center'} },
-                    { content:'LAVORO (M)', colSpan:2, styles:{halign:'center'} },
-                    { content:'LAVORO (P)', colSpan:2, styles:{halign:'center'} },
-                    { content:'VIAGGIO (R)', colSpan:2, styles:{halign:'center'} },
-                    { content:'P/C/H', rowSpan:2, styles:{halign:'center'} }
-                ],
-                ['DA','A','DA','A','DA','A','DA','A']
-            ],
+            head:[[
+                {content:'DATA',rowSpan:2,styles:{halign:'center'}},
+                {content:'TECNICO',rowSpan:2,styles:{halign:'left'}},
+                {content:'VIAGGIO (A)',colSpan:2,styles:{halign:'center'}},
+                {content:'LAVORO (M)',colSpan:2,styles:{halign:'center'}},
+                {content:'LAVORO (P)',colSpan:2,styles:{halign:'center'}},
+                {content:'VIAGGIO (R)',colSpan:2,styles:{halign:'center'}},
+                {content:'P/C/H',rowSpan:2,styles:{halign:'center'}}
+            ],['DA','A','DA','A','DA','A','DA','A']],
             body: orariBody,
-            theme: 'grid',
-            styles: { fontSize:7, cellPadding:1.5, lineColor:BLUE, lineWidth:0.2, textColor:BLACK, halign:'center', font:'helvetica' },
-            headStyles: { fillColor:LBLUE, textColor:BLUE, fontStyle:'bold', fontSize:6.5, halign:'center' },
-            columnStyles: {
-                0: { cellWidth:19 },
-                1: { cellWidth:35, halign:'left' },
-                10:{ cellWidth:12 }
-            },
-            margin: { left:ML, right:MR },
-            didDrawPage: (data) => {
-                if (data.pageNumber > 1) {
-                    // le pagine extra della tabella ricevono header ridisegnato
-                }
-            }
+            theme:'grid',
+            styles:{fontSize:7,cellPadding:1.3,lineColor:BLUE,lineWidth:0.2,textColor:BLACK,halign:'center',font:'helvetica'},
+            headStyles:{fillColor:LBLUE,textColor:BLUE,fontStyle:'bold',fontSize:6.5,halign:'center'},
+            columnStyles:{0:{cellWidth:18},1:{cellWidth:36,halign:'left'},10:{cellWidth:11}},
+            margin:{left:ML,right:MR},
+            pageBreak:'avoid'
         });
-        y = doc.lastAutoTable.finalY + 5;
+        y = doc.lastAutoTable.finalY + 3;
 
-        // ── DESCRIZIONE ────────────────────────────────────────
-        y = checkPageBreak(y, 20);
-        doc.setDrawColor(...BLUE); doc.setLineWidth(0.3);
-        doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...BLUE);
-        txt('PROBLEMA SEGNALATO / LAVORO ESEGUITO', ML+2, y+4);
-        doc.line(ML, y+6, PW-MR, y+6);
-        y += 8;
-
-        // Testo descrizione — spezza su più pagine se necessario
-        doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...BLACK);
-        const LINE_H = 4.5;
-        const descrLines = doc.splitTextToSize(_sanText(d.descr || '—'), CW-6);
-        let li = 0;
-        while (li < descrLines.length) {
-            const spazio = BOTTOM - y - 4;
-            const nRighe = Math.max(1, Math.floor(spazio / LINE_H));
-            const fetta  = descrLines.slice(li, li + nRighe);
-            const boxH   = fetta.length * LINE_H + 5;
-            doc.setDrawColor(...BLUE); doc.roundedRect(ML, y, CW, boxH, 1, 1, 'S');
-            doc.text(fetta, ML+3, y+4);
-            li  += nRighe;
-            y   += boxH + 3;
-            if (li < descrLines.length) {
-                y = nuovaPagina();
-                doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...BLUE);
-                txt('PROBLEMA SEGNALATO / LAVORO ESEGUITO (continua)', ML+2, y+4);
-                y += 8;
-                doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...BLACK);
-            }
-        }
-
-        // ── TABELLA RICAMBI ────────────────────────────────────
+        // Tabella ricambi (se presenti)
         if (d.ricambi.length > 0) {
-            y = checkPageBreak(y, 20);
             doc.autoTable({
                 startY: y,
-                head: [['CODICE','RICAMBIO / DESCRIZIONE','Q.TÀ','UNIT. €','TOT. €']],
-                body: d.ricambi.map(r => [r.codice, r.descrizione, r.qta, r.unit, r.tot]),
-                foot: d.totaleMat ? [[{ content:'TOTALE MATERIALI:', colSpan:4, styles:{halign:'right',fontStyle:'bold'} }, d.totaleMat]] : [],
-                theme: 'grid',
-                styles: { fontSize:8, cellPadding:1.8, lineColor:BLUE, lineWidth:0.2, textColor:BLACK },
-                headStyles: { fillColor:LBLUE, textColor:BLUE, fontStyle:'bold', fontSize:7 },
-                footStyles: { fillColor:[248,251,255], textColor:BLUE, fontStyle:'bold' },
-                columnStyles: {
-                    0: { cellWidth:22 },
-                    1: { halign:'left' },
-                    2: { cellWidth:16, halign:'center' },
-                    3: { cellWidth:22, halign:'right' },
-                    4: { cellWidth:22, halign:'right' }
-                },
-                margin: { left:ML, right:MR }
+                head:[['CODICE','DESCRIZIONE','Q.TÀ','UNIT. €','TOT. €']],
+                body: d.ricambi.map(r=>[r.codice,r.descrizione,r.qta,r.unit,r.tot]),
+                foot: d.totaleMat ? [[{content:'TOTALE:',colSpan:4,styles:{halign:'right',fontStyle:'bold'}},d.totaleMat]] : [],
+                theme:'grid',
+                styles:{fontSize:7.5,cellPadding:1.3,lineColor:BLUE,lineWidth:0.2,textColor:BLACK},
+                headStyles:{fillColor:LBLUE,textColor:BLUE,fontStyle:'bold',fontSize:7},
+                footStyles:{fillColor:[248,251,255],textColor:BLUE,fontStyle:'bold'},
+                columnStyles:{0:{cellWidth:20},1:{halign:'left'},2:{cellWidth:14,halign:'center'},3:{cellWidth:20,halign:'right'},4:{cellWidth:20,halign:'right'}},
+                margin:{left:ML,right:MR},
+                pageBreak:'avoid'
             });
-            y = doc.lastAutoTable.finalY + 5;
+            y = doc.lastAutoTable.finalY + 3;
         }
 
-        // ── RIEPILOGO + FIRMA ──────────────────────────────────
-        // Stima altezza blocco finale
-        const RIE_H = 48;
-        y = checkPageBreak(y, RIE_H + 5);
+        // Descrizione
+        doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(...BLUE);
+        doc.text('PROBLEMA SEGNALATO / LAVORO ESEGUITO', ML+2, y+4);
+        doc.setDrawColor(...BLUE); doc.setLineWidth(0.2);
+        doc.line(ML, y+6, PW-MR, y+6); y += 8;
+        doc.setDrawColor(...BLUE); doc.setLineWidth(0.2);
+        doc.roundedRect(ML, y, CW, descrH, 1, 1, 'S');
+        doc.setFont('helvetica','normal'); doc.setFontSize(descrFontSize); doc.setTextColor(...BLACK);
+        doc.text(descrLines, ML+3, y+descrLineH);
+        y += descrH + 3;
 
-        const colRieW = CW * 0.52;
-        const colFirW = CW * 0.48 - 3;
-        const colFirX = ML + colRieW + 3;
+        // Note + Firma — ridimensiona per stare nella pagina
+        const noteW = CW*0.50;
+        const firmaW = CW*0.50 - 3;
+        const firmaX = ML + noteW + 3;
+        const RIE_H = PH - y - piedeH - 8;  // usa tutto lo spazio rimasto
+        const rieH  = Math.max(36, Math.min(RIE_H, 50));
 
-        // Box riepilogo spese
-        doc.setDrawColor(...BLUE); doc.setLineWidth(0.3);
-        doc.roundedRect(ML, y, colRieW, RIE_H, 1, 1, 'S');
+        doc.setDrawColor(...BLUE); doc.setLineWidth(0.25);
+        doc.roundedRect(ML, y, noteW, rieH, 1, 1, 'S');
+        doc.roundedRect(firmaX, y, firmaW, rieH, 1, 1, 'S');
+
+        // Note
         doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(...BLUE);
-        txt('NOTE / RIEPILOGO SPESE', ML+2, y+5);
-        doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...BLACK);
-        const rieVoci = [
-            `ORE TOTALI: ${d.totLavoro || '—'}`,
+        doc.text('NOTE / RIEPILOGO SPESE', ML+2, y+5);
+        doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...BLACK);
+        const noteItems = [
+            `ORE TOTALI: ${d.totLavoro||'—'}`,
             `KM: —`,
-            `PASTI: ${d.totPasti || '—'}`,
-            `HOTEL: ${d.totHotel || '—'}`
+            `PASTI: ${d.totPasti||'—'}`,
+            `HOTEL: ${d.totHotel||'—'}`
         ];
-        rieVoci.forEach((v, i) => txt(v, ML+2, y+12+i*8));
+        noteItems.forEach((v,i) => doc.text(_san(v), ML+2, y+11+i*7));
 
-        // Box firma
-        doc.roundedRect(colFirX, y, colFirW, RIE_H, 1, 1, 'S');
+        // Responsabile + firma
         doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(...BLUE);
-        txt('RESPONSABILE', colFirX+2, y+5);
-        doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...BLACK);
-        const respWrap = doc.splitTextToSize(_sanText(d.respons || '—'), colFirW-4);
-        doc.text(respWrap.slice(0,2), colFirX+2, y+10);
-
+        doc.text('RESPONSABILE', firmaX+2, y+5);
+        doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...BLACK);
+        const respWrap = doc.splitTextToSize(_san(d.respons||'—'), firmaW-4);
+        doc.text(respWrap.slice(0,2), firmaX+2, y+10);
         doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(...BLUE);
-        txt('FIRMA CLIENTE', colFirX+2, y+20);
-        doc.setDrawColor(180, 200, 230); doc.setLineWidth(0.2);
-        doc.line(colFirX+2, y+22, colFirX+colFirW-2, y+22);
-
-        // Inserisce firma
+        doc.text('FIRMA CLIENTE', firmaX+2, y+20);
+        doc.setDrawColor(180,200,230); doc.setLineWidth(0.15);
+        doc.line(firmaX+2, y+22, firmaX+firmaW-2, y+22);
         const sigData = localStorage.getItem('tmc_sig');
         if (sigData) {
             try {
                 const fmt = sigData.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-                doc.addImage(sigData, fmt, colFirX+3, y+23, colFirW-6, RIE_H-26);
+                doc.addImage(sigData, fmt, firmaX+3, y+23, firmaW-6, rieH-26);
             } catch(e) {}
         }
 
-        // ── FOOTER SU TUTTE LE PAGINE ──────────────────────────
-        disegnaFooter();
+        // Piede
+        const py = PH - 5 - piedeH;
+        if (_pdfPiedeData) {
+            doc.addImage(_pdfPiedeData.data, 'JPEG', (PW-piedeW)/2, py, piedeW, piedeH);
+        }
+        doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(...GRAY);
+        doc.text(_san(d.ticket||''), ML, PH-3);
+        doc.text('Pagina 1 di 1', PW-MR, PH-3, {align:'right'});
+
         return doc;
     }
 
