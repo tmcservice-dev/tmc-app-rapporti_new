@@ -156,6 +156,13 @@
         .preset-btn { flex-shrink:0; padding:7px 12px; border:1px solid var(--tmc-blue); border-radius:14px; background:white; color:var(--tmc-blue); font-size:11px; font-weight:bold; cursor:pointer; white-space:nowrap; }
         .preset-btn:active { background:var(--tmc-blue); color:white; }
 
+        .ric-cal-row { display:flex; align-items:center; gap:10px; padding:10px 12px; background:#f8fbff; border:1px solid #cce0f5; border-radius:6px; margin-bottom:6px; }
+        .ric-cal-row.selezionato { background:#e6f1fb; border-color:var(--tmc-blue); }
+        .ric-cal-check { width:24px; height:24px; flex-shrink:0; cursor:pointer; accent-color:var(--tmc-blue); }
+        .ric-cal-desc { flex:1; font-size:14px; color:var(--tmc-dark); font-weight:bold; }
+        .ric-cal-desc.usato { color:var(--tmc-blue); }
+        .ric-cal-qta { width:52px; padding:5px 4px; border:1px solid #cce0f5; border-radius:5px; font-size:14px; font-weight:bold; color:var(--tmc-blue); text-align:center; }
+        .ric-cal-qta:disabled { background:#f5f5f5; color:#bbb; border-color:#eee; }
         .ric-riga { display:flex; gap:8px; align-items:center; margin-bottom:8px; padding:10px 12px; background:#f8fbff; border:1px solid #cce0f5; border-radius:6px; }
         .ric-riga input { border:none; border-bottom:1px solid #cce0f5; padding:4px 2px; font-size:14px; background:transparent; outline:none; }
         .ric-riga input.ric-desc { flex:1; text-transform:uppercase; }
@@ -573,7 +580,7 @@
                 <div class="wiz-head">
                     <div class="wiz-pill" id="ws4r-pill">Step — Ricambi</div>
                     <h2>Hai utilizzato ricambi?</h2>
-                    <p>Indica se sono stati montati componenti o materiali durante l'intervento.</p>
+                    <p>Indica se sono stati montati componenti durante l'intervento.</p>
                 </div>
                 <div class="wiz-alert" id="werr4r" style="display:none;">⚠️ Scegli se hai utilizzato ricambi oppure no.</div>
 
@@ -591,18 +598,23 @@
 
                 <!-- Pannello ricambi (visibile solo se Sì) -->
                 <div id="wiz-ric-pannello" style="display:none;">
-                    <div class="wiz-divider"></div>
 
                     <!-- Flag ricambi forniti dal cliente -->
                     <label style="display:flex; align-items:center; gap:12px; padding:12px 14px; background:#fff8e1; border:1px solid #ffe082; border-radius:6px; cursor:pointer; margin-bottom:14px; font-size:14px; font-weight:bold; color:#7B5800;">
-                        <input type="checkbox" id="wiz-ric-cliente" style="width:22px; height:22px; cursor:pointer; accent-color:var(--tmc-blue);" onchange="wizRicSyncA4()">
+                        <input type="checkbox" id="wiz-ric-cliente" style="width:22px; height:22px; cursor:pointer; accent-color:var(--tmc-blue);">
                         🔧 Ricambi forniti dal cliente
                     </label>
 
-                    <!-- Lista righe ricambi -->
-                    <div id="wiz-ric-lista"></div>
+                    <!-- Sezione A: ricambi dal calendario (con checkbox) -->
+                    <div id="wiz-ric-da-cal-wrap" style="display:none;">
+                        <div style="font-size:11px; font-weight:bold; color:var(--tmc-blue); text-transform:uppercase; margin-bottom:6px;">📋 Ricambi previsti (spunta quelli usati)</div>
+                        <div id="wiz-ric-da-cal"></div>
+                        <div class="wiz-divider"></div>
+                    </div>
 
-                    <!-- Pulsante aggiungi riga -->
+                    <!-- Sezione B: ricambi aggiuntivi manuali -->
+                    <div style="font-size:11px; font-weight:bold; color:var(--tmc-blue); text-transform:uppercase; margin-bottom:6px;" id="wiz-ric-extra-label">Ricambi aggiuntivi</div>
+                    <div id="wiz-ric-lista"></div>
                     <button onclick="wizRicAggiungiRiga()"
                         style="width:100%; margin-top:8px; padding:12px; border:1.5px dashed var(--tmc-blue); border-radius:6px; background:#f0f7ff; color:var(--tmc-blue); font-size:13px; font-weight:bold; cursor:pointer;">
                         + Aggiungi ricambio
@@ -876,6 +888,7 @@
         wizCur = step;
         wizUpdateProgress();
         if (step === 3)    wizRenderGiorno();
+        if (step === '4r') wizRicRipristina();
         if (step === 5)    { wizPopolaRiepilogo(); wizCheckEmail(); }
         window.scrollTo(0, 0);
     }
@@ -971,88 +984,134 @@
         return lavoro.length >= 10;
     }
     // ── STEP 4r: RICAMBI ──────────────────────────────────────
-    let wizRicSceltaValore = null; // null=non scelto, 'si', 'no'
-    let wizRicRighe = [];          // [{desc, qta}]
+    let wizRicSceltaValore = null;   // null | 'si' | 'no'
+    let wizRicDaCalendario = [];     // [{desc, qta, selezionato}]
+    let wizRicManuali = [];          // [{desc, qta}]
 
     function wizVal4r() {
         document.getElementById('werr4r').style.display = 'none';
         return wizRicSceltaValore !== null;
     }
 
+    function wizRicAggiornaPulsanti() {
+        const SEL  = 'flex:1;padding:18px;border:2px solid var(--tmc-blue);border-radius:8px;font-size:16px;font-weight:bold;cursor:pointer;background:var(--tmc-blue);color:white;';
+        const NORM = 'flex:1;padding:18px;border:1.5px solid #ccc;border-radius:8px;background:white;font-size:16px;font-weight:bold;color:#666;cursor:pointer;';
+        const no = document.getElementById('wiz-ric-btn-no');
+        const si = document.getElementById('wiz-ric-btn-si');
+        if (no) no.style.cssText = wizRicSceltaValore === 'no' ? SEL : NORM;
+        if (si) si.style.cssText = wizRicSceltaValore === 'si' ? SEL : NORM;
+        const p = document.getElementById('wiz-ric-pannello');
+        if (p) p.style.display = wizRicSceltaValore === 'si' ? 'block' : 'none';
+    }
+
     function wizRicScelta(valore) {
         wizRicSceltaValore = valore;
-        const btnNo = document.getElementById('wiz-ric-btn-no');
-        const btnSi = document.getElementById('wiz-ric-btn-si');
-        const pannello = document.getElementById('wiz-ric-pannello');
-        // Stile pulsanti
-        const stileSel = `flex:1; padding:18px; border:2px solid var(--tmc-blue); border-radius:8px; font-size:16px; font-weight:bold; cursor:pointer;`;
-        const stileNorm = `flex:1; padding:18px; border:1.5px solid #ccc; border-radius:8px; background:white; font-size:16px; font-weight:bold; color:#666; cursor:pointer;`;
-        if (valore === 'no') {
-            btnNo.style.cssText = stileSel + ' background:var(--tmc-blue); color:white;';
-            btnSi.style.cssText = stileNorm;
-            pannello.style.display = 'none';
-            wizRicRighe = [];
-        } else {
-            btnSi.style.cssText = stileSel + ' background:var(--tmc-blue); color:white;';
-            btnNo.style.cssText = stileNorm;
-            pannello.style.display = 'block';
-            if (wizRicRighe.length === 0) wizRicAggiungiRiga();
-        }
         document.getElementById('werr4r').style.display = 'none';
+        wizRicAggiornaPulsanti();
+        if (valore === 'si') {
+            wizRicRenderDaCalendario();
+            wizRicRenderManuali();
+            const lbl = document.getElementById('wiz-ric-extra-label');
+            if (lbl) lbl.style.display = wizRicDaCalendario.length > 0 ? 'block' : 'none';
+        }
     }
 
-    function wizRicAggiungiRiga(desc = '', qta = 1) {
-        wizRicRighe.push({ desc, qta });
-        wizRicRenderLista();
+    function wizRicImportaDaCalendario(materiali) {
+        if (!materiali || !materiali.length) return;
+        wizRicDaCalendario = materiali.map(m => ({
+            desc: m.testo.toUpperCase(), qta: m.qtaSuggerita || 1, selezionato: false
+        }));
     }
 
-    function wizRicRimuoviRiga(idx) {
-        wizRicRighe.splice(idx, 1);
-        wizRicRenderLista();
-    }
-
-    function wizRicRenderLista() {
-        const container = document.getElementById('wiz-ric-lista');
+    function wizRicRenderDaCalendario() {
+        const wrap = document.getElementById('wiz-ric-da-cal-wrap');
+        const container = document.getElementById('wiz-ric-da-cal');
+        if (!container) return;
+        if (!wizRicDaCalendario.length) { if (wrap) wrap.style.display = 'none'; return; }
+        if (wrap) wrap.style.display = 'block';
         container.innerHTML = '';
-        wizRicRighe.forEach((r, idx) => {
+        wizRicDaCalendario.forEach((r, idx) => {
             const div = document.createElement('div');
-            div.className = 'ric-riga';
+            div.className = 'ric-cal-row' + (r.selezionato ? ' selezionato' : '');
             div.innerHTML = `
-                <input type="text" class="ric-desc" placeholder="Descrizione ricambio..."
-                    value="${r.desc}"
-                    oninput="wizRicRighe[${idx}].desc=this.value.toUpperCase(); this.value=this.value.toUpperCase();">
-                <input type="number" class="ric-qta" placeholder="Q.tà" value="${r.qta}" min="1"
-                    oninput="wizRicRighe[${idx}].qta=parseInt(this.value)||1;">
-                <button class="ric-del" onclick="wizRicRimuoviRiga(${idx})" title="Rimuovi">×</button>
+                <input type="checkbox" class="ric-cal-check" ${r.selezionato ? 'checked' : ''}
+                    onchange="wizRicToggleCal(${idx}, this.checked)">
+                <span class="ric-cal-desc${r.selezionato ? ' usato' : ''}">${r.desc}</span>
+                <input type="number" class="ric-cal-qta" value="${r.qta}" min="1"
+                    ${!r.selezionato ? 'disabled' : ''}
+                    oninput="wizRicDaCalendario[${idx}].qta=parseInt(this.value)||1;">
             `;
             container.appendChild(div);
         });
     }
 
-    // Sincronizza ricambi wizard → tabella A4
+    function wizRicToggleCal(idx, checked) {
+        wizRicDaCalendario[idx].selezionato = checked;
+        const rows = document.querySelectorAll('#wiz-ric-da-cal .ric-cal-row');
+        if (rows[idx]) {
+            rows[idx].className = 'ric-cal-row' + (checked ? ' selezionato' : '');
+            const desc = rows[idx].querySelector('.ric-cal-desc');
+            if (desc) desc.className = 'ric-cal-desc' + (checked ? ' usato' : '');
+            const qEl = rows[idx].querySelector('.ric-cal-qta');
+            if (qEl) qEl.disabled = !checked;
+        }
+    }
+
+    function wizRicRenderManuali() {
+        const container = document.getElementById('wiz-ric-lista');
+        if (!container) return;
+        container.innerHTML = '';
+        wizRicManuali.forEach((r, idx) => {
+            const div = document.createElement('div');
+            div.className = 'ric-riga';
+            div.innerHTML = `
+                <input type="text" class="ric-desc" placeholder="Descrizione ricambio..."
+                    value="${r.desc}"
+                    oninput="wizRicManuali[${idx}].desc=this.value.toUpperCase();this.value=this.value.toUpperCase();">
+                <input type="number" class="ric-qta" placeholder="Q.tà" value="${r.qta}" min="1"
+                    oninput="wizRicManuali[${idx}].qta=parseInt(this.value)||1;">
+                <button class="ric-del" onclick="wizRicRimuoviManuale(${idx})">×</button>
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    function wizRicAggiungiRiga() {
+        wizRicManuali.push({ desc: '', qta: 1 });
+        wizRicRenderManuali();
+        setTimeout(() => {
+            const inputs = document.querySelectorAll('#wiz-ric-lista .ric-desc');
+            if (inputs.length) inputs[inputs.length-1].focus();
+        }, 50);
+    }
+
+    function wizRicRimuoviManuale(idx) {
+        wizRicManuali.splice(idx, 1);
+        wizRicRenderManuali();
+    }
+
+    function wizRicRipristina() {
+        wizRicAggiornaPulsanti();
+        if (wizRicSceltaValore === 'si') {
+            wizRicRenderDaCalendario();
+            wizRicRenderManuali();
+            const lbl = document.getElementById('wiz-ric-extra-label');
+            if (lbl) lbl.style.display = wizRicDaCalendario.length > 0 ? 'block' : 'none';
+        }
+    }
+
     function wizRicSyncA4() {
-        if (wizRicSceltaValore !== 'si' || wizRicRighe.length === 0) return;
-        // Svuota righe ricambi A4 e reinserisce
+        if (wizRicSceltaValore !== 'si') return;
         document.getElementById('ricambi-body').innerHTML = '';
         ricCount = 0;
-        const fornitoDaCliente = document.getElementById('wiz-ric-cliente')?.checked;
-        wizRicRighe.forEach(r => {
-            if (!r.desc && !r.qta) return;
-            ricCount++;
-            const tr = document.createElement('tr');
-            const desc = r.desc + (fornitoDaCliente ? ' (FORN. CLIENTE)' : '');
-            tr.innerHTML = `
-                <td><input type="text" class="save-data caps" name="rc_${ricCount}" value=""></td>
-                <td><input type="text" class="save-data caps" name="rd_${ricCount}" value="${desc}"></td>
-                <td><input type="number" class="save-data qta" name="rq_${ricCount}" value="${r.qta}"></td>
-                <td><input type="text" class="save-data unit" name="ru_${ricCount}" value=""></td>
-                <td><input type="text" class="save-data tot-riga" name="rt_${ricCount}" value=""></td>
-            `;
-            document.getElementById('ricambi-body').appendChild(tr);
-        });
-        attachListeners();
+        const suf = document.getElementById('wiz-ric-cliente')?.checked ? ' (FORN. CLIENTE)' : '';
+        wizRicDaCalendario.filter(r => r.selezionato)
+            .forEach(r => addRicambioConDati('', r.desc + suf, r.qta, '', ''));
+        wizRicManuali.filter(r => r.desc.trim())
+            .forEach(r => addRicambioConDati('', r.desc + suf, r.qta, '', ''));
         calc();
     }
+
 
     function wizVal4c() {
         document.getElementById('werr4c').style.display = 'none';
@@ -1684,10 +1743,18 @@
         const ricRow = document.getElementById('wr_ric_row');
         const ricEl  = document.getElementById('wr_ric');
         if (ricRow && ricEl) {
-            if (wizRicSceltaValore === 'si' && wizRicRighe.length > 0) {
-                const forn = document.getElementById('wiz-ric-cliente')?.checked ? '\n(ricambi forniti dal cliente)' : '';
-                ricEl.textContent = wizRicRighe.filter(r => r.desc).map(r => `${r.qta}× ${r.desc}`).join('\n') + forn;
-                ricRow.style.display = 'block';
+            if (wizRicSceltaValore === 'si') {
+                const selezionati = wizRicDaCalendario.filter(r => r.selezionato).map(r => `${r.qta}× ${r.desc}`);
+                const manuali     = wizRicManuali.filter(r => r.desc.trim()).map(r => `${r.qta}× ${r.desc}`);
+                const tutti = [...selezionati, ...manuali];
+                const forn = document.getElementById('wiz-ric-cliente')?.checked ? '\n(forniti dal cliente)' : '';
+                if (tutti.length > 0) {
+                    ricEl.textContent = tutti.join('\n') + forn;
+                    ricRow.style.display = 'block';
+                } else {
+                    ricEl.textContent = 'Nessun ricambio selezionato';
+                    ricRow.style.display = 'block';
+                }
             } else if (wizRicSceltaValore === 'no') {
                 ricEl.textContent = 'Nessun ricambio utilizzato';
                 ricRow.style.display = 'block';
@@ -1947,22 +2014,16 @@
         const conf = document.getElementById('ws4c-conferma');
         if (conf) conf.style.display = 'none';
 
-        // ── MATERIALI DAL CALENDARIO → iniettati nello step Ricambi ──
+        // ── MATERIALI DAL CALENDARIO → step 4r ──────────────────
         if (data.materiali && data.materiali.length > 0) {
-            // Pre-compila le righe ricambi con i materiali dal calendario
-            // Il tecnico le troverà già nello step 4r come righe editabili
-            wizRicRighe = data.materiali.map(m => ({ desc: m.testo.toUpperCase(), qta: m.qtaSuggerita || 1 }));
-            // Imposta automaticamente "Sì" se ci sono materiali
-            wizRicSceltaValore = 'si';
-            wizRicRenderLista();
-            // Aggiorna UI pulsanti sì/no se lo step è già visibile
-            const btnNo = document.getElementById('wiz-ric-btn-no');
-            const btnSi = document.getElementById('wiz-ric-btn-si');
-            const pannello = document.getElementById('wiz-ric-pannello');
-            if (btnSi) { btnSi.style.cssText = `flex:1; padding:18px; border:2px solid var(--tmc-blue); border-radius:8px; font-size:16px; font-weight:bold; cursor:pointer; background:var(--tmc-blue); color:white;`; }
-            if (btnNo) { btnNo.style.cssText = `flex:1; padding:18px; border:1.5px solid #ccc; border-radius:8px; background:white; font-size:16px; font-weight:bold; color:#666; cursor:pointer;`; }
-            if (pannello) pannello.style.display = 'block';
+            wizRicImportaDaCalendario(data.materiali);
+        } else {
+            wizRicDaCalendario = [];
         }
+        // Reset scelta sì/no e manuali ad ogni nuova importazione
+        wizRicSceltaValore = null;
+        wizRicManuali = [];
+        wizRicAggiornaPulsanti();
 
         document.getElementById('id_univoco_input').value = "";
         generaIdUnivoco(); saveDraft();
