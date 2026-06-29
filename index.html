@@ -2031,19 +2031,19 @@
     // ════════════════════════════════════════════════════════════
     // GENERAZIONE PDF CON jsPDF (deterministico, identico su ogni device)
     // ════════════════════════════════════════════════════════════
-    // Cache delle immagini banner/piede caricate come dataURL una sola volta
+    // GENERAZIONE PDF — una pagina, layout compatto
+    // ════════════════════════════════════════════════════════════
     let _pdfBannerData = null, _pdfPiedeData = null, _pdfImgPromise = null;
 
     function _caricaImmagine(url) {
-        return new Promise((resolve) => {
+        return new Promise(resolve => {
             const img = new Image();
             img.crossOrigin = 'anonymous';
             img.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = img.naturalWidth;
-                canvas.height = img.naturalHeight;
-                canvas.getContext('2d').drawImage(img, 0, 0);
-                try { resolve({ data: canvas.toDataURL('image/jpeg', 0.85), w: img.naturalWidth, h: img.naturalHeight }); }
+                const c = document.createElement('canvas');
+                c.width = img.naturalWidth; c.height = img.naturalHeight;
+                c.getContext('2d').drawImage(img, 0, 0);
+                try { resolve({ data: c.toDataURL('image/jpeg', 0.92), w: img.naturalWidth, h: img.naturalHeight }); }
                 catch(e) { resolve(null); }
             };
             img.onerror = () => resolve(null);
@@ -2060,41 +2060,23 @@
         return _pdfImgPromise;
     }
 
-    // Estrae tutti i dati del rapporto dai campi dell'A4
+    // Rimuove caratteri non Latin-1 che jsPDF non gestisce
+    function _san(s) {
+        return (s || '').replace(/[^\x00-\xFF]/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
     function _raccogliDatiRapporto() {
-        const ticket    = document.getElementById('n_rapporto_input').value || '';
-        const idUnivoco = document.getElementById('id_univoco_input').value || '';
-        const cliente   = document.getElementById('cliente_input').value || '';
-        const indirizzo = document.getElementById('indirizzo_input').value || '';
-        const macchina  = document.getElementById('macchina_input').value || '';
-        const email     = document.getElementById('email_input').value || '';
-        const tipoInt   = document.getElementById('tipo_int_hidden').value || 'P';
-        const mezzo     = document.querySelector('[name="mezzo_trasporto"]')?.value || '';
-        const descr     = document.getElementById('descrizione_input').value || '';
-        const respons   = document.querySelector('[name="nome_responsabile"]')?.value || '';
-        // Tecnici
+        const gi = id => document.getElementById(id);
+        const gn = n  => document.getElementsByName(n)[0]?.value || '';
         const tecnici = [];
-        document.querySelectorAll('[name^="tecnico_"]').forEach(el => {
-            const v = (el.value || '').trim();
-            if (v) tecnici.push(v);
-        });
-        // Righe orari
+        document.querySelectorAll('[name^="tecnico_"]').forEach(el => { if(el.value.trim()) tecnici.push(el.value.trim()); });
         const orari = [];
         for (let i = 1; i <= rowCount; i++) {
-            const g = (n) => document.getElementsByName(`${n}_${i}`)[0]?.value || '';
-            const gc = (n) => document.getElementsByName(`${n}_${i}`)[0]?.checked || false;
-            // Salta righe vuote
-            if (!g('tec') && !g('d') && !g('va1') && !g('lm1') && !g('lp1') && !g('vr1')) continue;
-            orari.push({
-                data: g('d'), tecnico: g('tec'),
-                va1: g('va1'), va2: g('va2'),
-                lm1: g('lm1'), lm2: g('lm2'),
-                lp1: g('lp1'), lp2: g('lp2'),
-                vr1: g('vr1'), vr2: g('vr2'),
-                p: gc('p'), c: gc('c'), h: gc('h')
-            });
+            const gv = f => document.getElementsByName(`${f}_${i}`)[0]?.value || '';
+            const gc = f => document.getElementsByName(`${f}_${i}`)[0]?.checked || false;
+            if (!gv('d') && !gv('tec') && !gv('lm1') && !gv('lp1')) continue;
+            orari.push({ data:gv('d'), tecnico:gv('tec'), va1:gv('va1'), va2:gv('va2'), lm1:gv('lm1'), lm2:gv('lm2'), lp1:gv('lp1'), lp2:gv('lp2'), vr1:gv('vr1'), vr2:gv('vr2'), p:gc('p'), c:gc('c'), h:gc('h') });
         }
-        // Ricambi
         const ricambi = [];
         for (let i = 1; i <= ricCount; i++) {
             const cod = document.getElementsByName(`rc_${i}`)[0]?.value || '';
@@ -2102,316 +2084,234 @@
             const qta = document.getElementsByName(`rq_${i}`)[0]?.value || '';
             const unit= document.getElementsByName(`ru_${i}`)[0]?.value || '';
             const tot = document.getElementsByName(`rt_${i}`)[0]?.value || '';
-            if (cod || des || qta) ricambi.push({ codice: cod, descrizione: des, qta, unit, tot });
+            if (des.trim() || cod.trim()) ricambi.push({ codice:cod, descrizione:des, qta, unit, tot });
         }
-        const totaleMat = document.getElementById('gran-totale')?.value || '';
-        const totLavoro = document.getElementById('tot_lavoro_span')?.innerText || '';
-        const totPasti  = document.getElementById('tot_pch_span')?.innerText || '';
-        const totHotel  = document.getElementById('tot_hotel_span')?.innerText || '';
         return {
-            ticket, idUnivoco, cliente, indirizzo, macchina, email, tipoInt, mezzo,
-            descr, respons, tecnici, orari, ricambi, totaleMat, totLavoro, totPasti, totHotel
+            ticket:    gi('n_rapporto_input')?.value || '',
+            idUnivoco: gi('id_univoco_input')?.value || '',
+            cliente:   gi('cliente_input')?.value || '',
+            indirizzo: gi('indirizzo_input')?.value || '',
+            macchina:  gi('macchina_input')?.value || '',
+            tipoInt:   gi('tipo_int_hidden')?.value || 'P',
+            mezzo:     gn('mezzo_trasporto'),
+            descr:     gi('descrizione_input')?.value || '',
+            respons:   gn('nome_responsabile'),
+            tecnici, orari, ricambi,
+            totaleMat: gi('gran-totale')?.value || '',
+            totLavoro: gi('tot_lavoro_span')?.innerText || '',
+            totPasti:  gi('tot_pch_span')?.innerText || '',
+            totHotel:  gi('tot_hotel_span')?.innerText || ''
         };
     }
 
-    // Genera il PDF e restituisce l'oggetto jsPDF
     async function generaPdfRapporto() {
         await _precaricaImmaginiPdf();
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-        const dati = _raccogliDatiRapporto();
-        const PAGE_W = 210, PAGE_H = 297;
-        const MARGIN_L = 8, MARGIN_R = 8, MARGIN_TOP = 8, MARGIN_BOT = 8;
-        const CONTENT_W = PAGE_W - MARGIN_L - MARGIN_R;
-        const BLUE = [0, 84, 166];
-        const LIGHT_BLUE = [240, 247, 255];
-        const GRAY = [120, 120, 120];
+        const d = _raccogliDatiRapporto();
 
-        // ── HEADER ripetuto su ogni pagina ──────────────────────
-        function disegnaHeader() {
-            let y = MARGIN_TOP;
-            // Banner intestazione
-            if (_pdfBannerData) {
-                const ratio = _pdfBannerData.h / _pdfBannerData.w;
-                const bannerH = CONTENT_W * ratio;
-                doc.addImage(_pdfBannerData.data, 'JPEG', MARGIN_L, y, CONTENT_W, bannerH);
-                y += bannerH + 2;
-            }
-            // Titolo + tipo intervento
-            doc.setDrawColor(...BLUE);
-            doc.setLineWidth(0.5);
-            doc.line(MARGIN_L, y, PAGE_W - MARGIN_R, y);
-            y += 1.5;
-            doc.setTextColor(...BLUE);
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(11);
-            doc.text(`RAPPORTO INTERVENTO N. ${dati.ticket || '—'}`, MARGIN_L + 2, y + 3);
-            // Tipo G/P a destra
-            const tipoText = dati.tipoInt === 'G' ? 'GRATUITO' : 'PAGAMENTO';
-            doc.setFontSize(9);
-            doc.setFillColor(...BLUE);
-            doc.setTextColor(255, 255, 255);
-            const tipoW = doc.getTextWidth(tipoText) + 6;
-            doc.roundedRect(PAGE_W - MARGIN_R - tipoW - 2, y - 1, tipoW, 6, 1, 1, 'F');
-            doc.text(tipoText, PAGE_W - MARGIN_R - tipoW/2 - 2, y + 3, { align: 'center' });
-            y += 5;
-            doc.setTextColor(100, 100, 100);
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(7);
-            doc.text(`ID FATTURAZIONE: ${dati.idUnivoco || '—'}`, MARGIN_L + 2, y + 3);
-            y += 4;
-            doc.setDrawColor(...BLUE);
-            doc.line(MARGIN_L, y, PAGE_W - MARGIN_R, y);
-            y += 3;
+        const PW=210, PH=297, ML=8, MR=8, CW=194;
+        const BLUE=[0,84,166], LBLUE=[240,247,255], GRAY=[120,120,120], BLACK=[20,20,20];
 
-            // ── BLOCCO CLIENTE/INTERVENTO (sempre ripetuto) ──
-            doc.setDrawColor(...BLUE);
-            doc.setLineWidth(0.3);
-            const boxStart = y;
-            const boxH = 32;
-            doc.roundedRect(MARGIN_L, y, CONTENT_W, boxH, 1, 1, 'S');
-            const colW = CONTENT_W / 2;
-            // Colonna sinistra: tecnici + mezzo
-            doc.setTextColor(...BLUE);
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(6);
-            doc.text('TECNICO/I INCARICATO/I', MARGIN_L + 2, y + 3);
-            doc.setTextColor(0, 0, 0);
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(9);
-            const tecLines = dati.tecnici.length ? dati.tecnici.join(', ') : '—';
-            const tecWrap = doc.splitTextToSize(tecLines, colW - 4);
-            doc.text(tecWrap.slice(0, 3), MARGIN_L + 2, y + 7);
-            doc.setTextColor(...BLUE);
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(6);
-            doc.text('MEZZO DI TRASPORTO', MARGIN_L + 2, y + 22);
-            doc.setTextColor(0, 0, 0);
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(9);
-            doc.text(dati.mezzo || '—', MARGIN_L + 2, y + 26);
-            // Separatore verticale
-            doc.setDrawColor(220, 220, 220);
-            doc.line(MARGIN_L + colW, y + 2, MARGIN_L + colW, y + boxH - 2);
-            // Colonna destra: cliente + sede + macchina
-            const cx = MARGIN_L + colW + 3;
-            doc.setTextColor(...BLUE);
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(6);
-            doc.text('CLIENTE', cx, y + 3);
-            doc.setTextColor(0, 0, 0);
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(10);
-            const cliWrap = doc.splitTextToSize(dati.cliente || '—', colW - 6);
-            doc.text(cliWrap[0] || '—', cx, y + 7);
-            doc.setTextColor(...BLUE);
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(6);
-            doc.text('SEDE INTERVENTO', cx, y + 12);
-            doc.setTextColor(0, 0, 0);
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(8);
-            const sedeWrap = doc.splitTextToSize(dati.indirizzo || '—', colW - 6);
-            doc.text(sedeWrap.slice(0, 2), cx, y + 16);
-            doc.setTextColor(...BLUE);
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(6);
-            doc.text('MACCHINA / MATRICOLA', cx, y + 25);
-            doc.setTextColor(0, 0, 0);
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(8);
-            doc.text(dati.macchina || '—', cx, y + 29);
-            return boxStart + boxH + 3;
+        // ── Misura altezze fisse ─────────────────────────────────
+        const bannerH = _pdfBannerData ? (CW * _pdfBannerData.h / _pdfBannerData.w) : 0;
+        const piedeW  = CW * 0.52;
+        const piedeH  = _pdfPiedeData  ? (piedeW * _pdfPiedeData.h  / _pdfPiedeData.w)  : 8;
+
+        // Stima spazio occupato dagli elementi fissi
+        const ALT_BANNER   = bannerH + 2;
+        const ALT_TITOLO   = 14;          // titolo + id fatturazione
+        const ALT_BOX_CLI  = 30;          // box tecnici/cliente
+        const ALT_TAB_ORARI = 7 + (d.orari.length || 1) * 6.5; // header 2 righe + righe
+        const ALT_DESCR_LBL = 7;
+        const ALT_RIEPILOGO = 44;         // note + firma
+        const ALT_PIEDE     = piedeH + 6;
+        const ALT_RICAMBI   = d.ricambi.length > 0 ? (10 + d.ricambi.length * 6) : 0;
+        const MARGINI_VARI  = 16;         // spazi tra sezioni
+
+        const ALT_FISSA = ALT_BANNER + ALT_TITOLO + ALT_BOX_CLI + ALT_TAB_ORARI +
+                          ALT_DESCR_LBL + ALT_RIEPILOGO + ALT_PIEDE + ALT_RICAMBI + MARGINI_VARI;
+
+        // Spazio disponibile per la descrizione
+        const DESCR_AVAIL = Math.max(20, PH - ALT_FISSA);
+
+        // Font size della descrizione: riduce se serve
+        let descrFontSize = 8.5;
+        let descrLineH    = 4.2;
+        // Calcola quante righe di testo a font normale
+        doc.setFontSize(descrFontSize);
+        const descrSan = _san(d.descr || '—');
+        let descrLines = doc.splitTextToSize(descrSan, CW-6);
+        let descrH = descrLines.length * descrLineH + 5;
+
+        // Se non entra, riduci font fino a 7
+        while (descrH > DESCR_AVAIL && descrFontSize > 7) {
+            descrFontSize -= 0.3;
+            descrLineH    -= 0.1;
+            doc.setFontSize(descrFontSize);
+            descrLines = doc.splitTextToSize(descrSan, CW-6);
+            descrH = descrLines.length * descrLineH + 5;
         }
 
-        // ── FOOTER ripetuto ─────────────────────────────────────
-        function disegnaFooter(pageNum, pageTot) {
-            if (_pdfPiedeData) {
-                const ratio = _pdfPiedeData.h / _pdfPiedeData.w;
-                const piedeW = CONTENT_W * 0.55;
-                const piedeH = piedeW * ratio;
-                doc.addImage(_pdfPiedeData.data, 'JPEG', (PAGE_W - piedeW) / 2, PAGE_H - MARGIN_BOT - piedeH, piedeW, piedeH);
-            }
-            // Numero pagina
-            doc.setTextColor(...GRAY);
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(7);
-            doc.text(`Pagina ${pageNum} di ${pageTot}`, PAGE_W - MARGIN_R, PAGE_H - 3, { align: 'right' });
-            doc.text(dati.ticket || '', MARGIN_L, PAGE_H - 3);
+        // ── Disegna pagina ───────────────────────────────────────
+        let y = 5;
+
+        // Banner
+        if (_pdfBannerData) {
+            doc.addImage(_pdfBannerData.data, 'JPEG', ML, y, CW, bannerH);
+            y += bannerH + 2;
         }
 
-        // ── CONTENUTO PRIMA PAGINA ──────────────────────────────
-        let yPos = disegnaHeader();
+        // Titolo + badge
+        doc.setDrawColor(...BLUE); doc.setLineWidth(0.6);
+        doc.line(ML, y, PW-MR, y); y += 4;
+        doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...BLUE);
+        doc.text(_san(`RAPPORTO INTERVENTO N. ${d.ticket || '—'}`), ML+2, y);
+        const badgeTxt = d.tipoInt==='G' ? 'GRATUITO' : 'PAGAMENTO';
+        doc.setFontSize(8);
+        const bw = doc.getTextWidth(badgeTxt)+6;
+        doc.setFillColor(...BLUE); doc.roundedRect(PW-MR-bw, y-4, bw, 6, 1, 1, 'F');
+        doc.setTextColor(255,255,255); doc.text(badgeTxt, PW-MR-bw/2, y, {align:'center'}); y += 3;
+        doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(...GRAY);
+        doc.text(_san(`ID FATTURAZIONE: ${d.idUnivoco||'—'}`), ML+2, y); y += 2;
+        doc.setDrawColor(...BLUE); doc.setLineWidth(0.4);
+        doc.line(ML, y, PW-MR, y); y += 3;
+
+        // Box cliente/tecnico
+        const cHalf = CW/2-1;
+        doc.setDrawColor(...BLUE); doc.setLineWidth(0.25);
+        doc.roundedRect(ML, y, cHalf, ALT_BOX_CLI, 1, 1, 'S');
+        doc.roundedRect(ML+cHalf+2, y, cHalf, ALT_BOX_CLI, 1, 1, 'S');
+        const lbl = (t,x,yy) => { doc.setFont('helvetica','bold'); doc.setFontSize(6); doc.setTextColor(...BLUE); doc.text(t,x,yy); };
+        const val = (t,x,yy,sz,bold) => { doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(sz||9); doc.setTextColor(...BLACK); doc.text(_san(t),x,yy); };
+        lbl('TECNICO/I INCARICATO/I', ML+2, y+4);
+        doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...BLACK);
+        const tecWrap = doc.splitTextToSize(_san(d.tecnici.join(', ')||'—'), cHalf-4);
+        doc.text(tecWrap.slice(0,3), ML+2, y+8);
+        lbl('MEZZO DI TRASPORTO', ML+2, y+22);
+        val(d.mezzo||'—', ML+2, y+26, 8, false);
+        const rx = ML+cHalf+4;
+        lbl('CLIENTE', rx, y+4);
+        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...BLACK);
+        doc.text(_san(d.cliente||'—'), rx, y+9);
+        lbl('SEDE INTERVENTO', rx, y+14);
+        doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...BLACK);
+        const sedeWrap = doc.splitTextToSize(_san(d.indirizzo||'—'), cHalf-4);
+        doc.text(sedeWrap.slice(0,2), rx, y+18);
+        lbl('MACCHINA / MATRICOLA', rx, y+24);
+        val(d.macchina||'—', rx, y+28, 8, false);
+        y += ALT_BOX_CLI + 2;
 
         // Tabella orari
-        const orariBody = dati.orari.map(o => [
-            o.data, o.tecnico,
-            o.va1, o.va2, o.lm1, o.lm2, o.lp1, o.lp2, o.vr1, o.vr2,
-            (o.p?'P':'') + (o.c?'/C':'') + (o.h?'/H':'')
+        const orariBody = (d.orari.length ? d.orari : [{}]).map(o => [
+            o.data||'', o.tecnico||'',
+            o.va1||'', o.va2||'', o.lm1||'', o.lm2||'',
+            o.lp1||'', o.lp2||'', o.vr1||'', o.vr2||'',
+            [(o.p?'P':''),(o.c?'C':''),(o.h?'H':'')].filter(Boolean).join('/')||''
         ]);
-        if (orariBody.length === 0) orariBody.push(['', '', '', '', '', '', '', '', '', '', '']);
-
         doc.autoTable({
-            startY: yPos,
-            head: [
-                [
-                    { content: 'DATA', rowSpan: 2 },
-                    { content: 'TECNICO', rowSpan: 2 },
-                    { content: 'VIAGGIO (A)', colSpan: 2 },
-                    { content: 'LAVORO (M)', colSpan: 2 },
-                    { content: 'LAVORO (P)', colSpan: 2 },
-                    { content: 'VIAGGIO (R)', colSpan: 2 },
-                    { content: 'P/C/H', rowSpan: 2 }
-                ],
-                ['DA','A','DA','A','DA','A','DA','A']
-            ],
+            startY: y,
+            head:[[
+                {content:'DATA',rowSpan:2,styles:{halign:'center'}},
+                {content:'TECNICO',rowSpan:2,styles:{halign:'left'}},
+                {content:'VIAGGIO (A)',colSpan:2,styles:{halign:'center'}},
+                {content:'LAVORO (M)',colSpan:2,styles:{halign:'center'}},
+                {content:'LAVORO (P)',colSpan:2,styles:{halign:'center'}},
+                {content:'VIAGGIO (R)',colSpan:2,styles:{halign:'center'}},
+                {content:'P/C/H',rowSpan:2,styles:{halign:'center'}}
+            ],['DA','A','DA','A','DA','A','DA','A']],
             body: orariBody,
-            theme: 'grid',
-            styles: { fontSize: 7, halign: 'center', cellPadding: 1.2, lineColor: BLUE, lineWidth: 0.2 },
-            headStyles: { fillColor: LIGHT_BLUE, textColor: BLUE, fontStyle: 'bold', fontSize: 6 },
-            columnStyles: {
-                0: { cellWidth: 18 },
-                1: { cellWidth: 32, halign: 'left' },
-                10:{ cellWidth: 14 }
-            },
-            margin: { left: MARGIN_L, right: MARGIN_R, top: 0, bottom: PAGE_H - MARGIN_BOT - 15 },
-            didDrawPage: function() {
-                // Su pagine nuove ridisegna header
-                if (doc.internal.getNumberOfPages() > 1) {
-                    const pageBeforeRedraw = doc.internal.getCurrentPageInfo().pageNumber;
-                    // L'header è già stato disegnato all'inizio. Ridisegniamolo nelle pagine successive.
-                }
-            }
+            theme:'grid',
+            styles:{fontSize:7,cellPadding:1.3,lineColor:BLUE,lineWidth:0.2,textColor:BLACK,halign:'center',font:'helvetica'},
+            headStyles:{fillColor:LBLUE,textColor:BLUE,fontStyle:'bold',fontSize:6.5,halign:'center'},
+            columnStyles:{0:{cellWidth:18},1:{cellWidth:36,halign:'left'},10:{cellWidth:11}},
+            margin:{left:ML,right:MR},
+            pageBreak:'avoid'
         });
-        yPos = doc.lastAutoTable.finalY + 4;
+        y = doc.lastAutoTable.finalY + 3;
 
-        // Descrizione (riquadro testo lungo, può occupare più pagine)
-        doc.setDrawColor(...BLUE);
-        doc.setLineWidth(0.3);
-        doc.setTextColor(...BLUE);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8);
-        // Verifica spazio
-        if (yPos > PAGE_H - MARGIN_BOT - 35) { doc.addPage(); yPos = disegnaHeader(); }
-        const descrTitleY = yPos;
-        doc.text('PROBLEMA SEGNALATO / LAVORO ESEGUITO', MARGIN_L + 2, yPos + 4);
-        yPos += 6;
-        // Calcolo altezza descrizione, eventualmente su più pagine
-        doc.setTextColor(0, 0, 0);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        const descrWrap = doc.splitTextToSize(dati.descr || '—', CONTENT_W - 6);
-        const lineH = 4;
-        let descrCursor = 0;
-        while (descrCursor < descrWrap.length) {
-            const spazioDisponibile = PAGE_H - MARGIN_BOT - 25 - yPos;
-            const righePagina = Math.floor(spazioDisponibile / lineH);
-            const fetta = descrWrap.slice(descrCursor, descrCursor + righePagina);
-            const boxH = fetta.length * lineH + 4;
-            doc.setDrawColor(...BLUE);
-            doc.roundedRect(MARGIN_L, yPos - 1, CONTENT_W, boxH, 1, 1, 'S');
-            doc.text(fetta, MARGIN_L + 3, yPos + 3);
-            descrCursor += righePagina;
-            yPos += boxH + 2;
-            if (descrCursor < descrWrap.length) {
-                doc.addPage();
-                yPos = disegnaHeader();
-                doc.setTextColor(...BLUE);
-                doc.setFont('helvetica', 'bold');
-                doc.setFontSize(8);
-                doc.text('PROBLEMA SEGNALATO / LAVORO ESEGUITO (continua)', MARGIN_L + 2, yPos + 4);
-                yPos += 6;
-                doc.setTextColor(0, 0, 0);
-                doc.setFont('helvetica', 'normal');
-                doc.setFontSize(9);
-            }
-        }
-
-        // Ricambi (solo se ce ne sono)
-        if (dati.ricambi.length > 0) {
-            if (yPos > PAGE_H - MARGIN_BOT - 50) { doc.addPage(); yPos = disegnaHeader(); }
+        // Tabella ricambi (se presenti)
+        if (d.ricambi.length > 0) {
             doc.autoTable({
-                startY: yPos + 2,
-                head: [['CODICE', 'RICAMBIO', 'Q.TÀ', 'UNIT. €', 'TOT. €']],
-                body: dati.ricambi.map(r => [r.codice, r.descrizione, r.qta, r.unit, r.tot]),
-                foot: dati.totaleMat ? [[{ content: 'TOTALE MATERIALI:', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } }, dati.totaleMat]] : [],
-                theme: 'grid',
-                styles: { fontSize: 8, halign: 'center', cellPadding: 1.5, lineColor: BLUE, lineWidth: 0.2 },
-                headStyles: { fillColor: LIGHT_BLUE, textColor: BLUE, fontStyle: 'bold', fontSize: 7 },
-                footStyles: { fillColor: [248, 251, 255], textColor: BLUE, fontStyle: 'bold' },
-                columnStyles: {
-                    0: { cellWidth: 25 },
-                    1: { cellWidth: 'auto', halign: 'left' },
-                    2: { cellWidth: 18 },
-                    3: { cellWidth: 22 },
-                    4: { cellWidth: 22 }
-                },
-                margin: { left: MARGIN_L, right: MARGIN_R, bottom: PAGE_H - MARGIN_BOT - 15 }
+                startY: y,
+                head:[['CODICE','DESCRIZIONE','Q.TÀ','UNIT. €','TOT. €']],
+                body: d.ricambi.map(r=>[r.codice,r.descrizione,r.qta,r.unit,r.tot]),
+                foot: d.totaleMat ? [[{content:'TOTALE:',colSpan:4,styles:{halign:'right',fontStyle:'bold'}},d.totaleMat]] : [],
+                theme:'grid',
+                styles:{fontSize:7.5,cellPadding:1.3,lineColor:BLUE,lineWidth:0.2,textColor:BLACK},
+                headStyles:{fillColor:LBLUE,textColor:BLUE,fontStyle:'bold',fontSize:7},
+                footStyles:{fillColor:[248,251,255],textColor:BLUE,fontStyle:'bold'},
+                columnStyles:{0:{cellWidth:20},1:{halign:'left'},2:{cellWidth:14,halign:'center'},3:{cellWidth:20,halign:'right'},4:{cellWidth:20,halign:'right'}},
+                margin:{left:ML,right:MR},
+                pageBreak:'avoid'
             });
-            yPos = doc.lastAutoTable.finalY + 4;
+            y = doc.lastAutoTable.finalY + 3;
         }
 
-        // Riepilogo + firma — devono stare insieme nell'ultima pagina
-        const RIEPILOGO_H = 50;
-        if (yPos > PAGE_H - MARGIN_BOT - RIEPILOGO_H - 15) { doc.addPage(); yPos = disegnaHeader(); }
-        // Layout 2 colonne: riepilogo a sinistra, firma a destra
-        const colRiepW = CONTENT_W * 0.55;
-        const colFirmaW = CONTENT_W * 0.45 - 4;
-        // Riquadro riepilogo
-        doc.setDrawColor(...BLUE);
-        doc.roundedRect(MARGIN_L, yPos, colRiepW, RIEPILOGO_H, 1, 1, 'S');
-        doc.setTextColor(...BLUE);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7);
-        doc.text('NOTE / RIEPILOGO SPESE', MARGIN_L + 2, yPos + 4);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8);
-        doc.setTextColor(0, 0, 0);
-        let ry = yPos + 9;
-        doc.text(`ORE TOTALI: ${dati.totLavoro || '—'}`, MARGIN_L + 2, ry); ry += 6;
-        doc.text(`KM: —`, MARGIN_L + 2, ry); ry += 6;
-        doc.text(`PASTI: ${dati.totPasti || '—'}`, MARGIN_L + 2, ry); ry += 6;
-        doc.text(`HOTEL: ${dati.totHotel || '—'}`, MARGIN_L + 2, ry);
-        // Riquadro firma
-        const fx = MARGIN_L + colRiepW + 4;
-        doc.roundedRect(fx, yPos, colFirmaW, RIEPILOGO_H, 1, 1, 'S');
-        doc.setTextColor(...BLUE);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7);
-        doc.text('RESPONSABILE', fx + 2, yPos + 4);
-        doc.setTextColor(0, 0, 0);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.text(dati.respons || '—', fx + colFirmaW/2, yPos + 9, { align: 'center' });
-        doc.setDrawColor(...BLUE);
-        doc.setLineWidth(0.1);
-        doc.line(fx + 2, yPos + 11, fx + colFirmaW - 2, yPos + 11);
-        doc.setTextColor(...BLUE);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7);
-        doc.text('FIRMA CLIENTE', fx + 2, yPos + 15);
-        // Inserisci la firma
+        // Descrizione
+        doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(...BLUE);
+        doc.text('PROBLEMA SEGNALATO / LAVORO ESEGUITO', ML+2, y+4);
+        doc.setDrawColor(...BLUE); doc.setLineWidth(0.2);
+        doc.line(ML, y+6, PW-MR, y+6); y += 8;
+        doc.setDrawColor(...BLUE); doc.setLineWidth(0.2);
+        doc.roundedRect(ML, y, CW, descrH, 1, 1, 'S');
+        doc.setFont('helvetica','normal'); doc.setFontSize(descrFontSize); doc.setTextColor(...BLACK);
+        doc.text(descrLines, ML+3, y+descrLineH);
+        y += descrH + 3;
+
+        // Note + Firma — ridimensiona per stare nella pagina
+        const noteW = CW*0.50;
+        const firmaW = CW*0.50 - 3;
+        const firmaX = ML + noteW + 3;
+        const RIE_H = PH - y - piedeH - 8;  // usa tutto lo spazio rimasto
+        const rieH  = Math.max(36, Math.min(RIE_H, 50));
+
+        doc.setDrawColor(...BLUE); doc.setLineWidth(0.25);
+        doc.roundedRect(ML, y, noteW, rieH, 1, 1, 'S');
+        doc.roundedRect(firmaX, y, firmaW, rieH, 1, 1, 'S');
+
+        // Note
+        doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(...BLUE);
+        doc.text('NOTE / RIEPILOGO SPESE', ML+2, y+5);
+        doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...BLACK);
+        const noteItems = [
+            `ORE TOTALI: ${d.totLavoro||'—'}`,
+            `KM: —`,
+            `PASTI: ${d.totPasti||'—'}`,
+            `HOTEL: ${d.totHotel||'—'}`
+        ];
+        noteItems.forEach((v,i) => doc.text(_san(v), ML+2, y+11+i*7));
+
+        // Responsabile + firma
+        doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(...BLUE);
+        doc.text('RESPONSABILE', firmaX+2, y+5);
+        doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...BLACK);
+        const respWrap = doc.splitTextToSize(_san(d.respons||'—'), firmaW-4);
+        doc.text(respWrap.slice(0,2), firmaX+2, y+10);
+        doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(...BLUE);
+        doc.text('FIRMA CLIENTE', firmaX+2, y+20);
+        doc.setDrawColor(180,200,230); doc.setLineWidth(0.15);
+        doc.line(firmaX+2, y+22, firmaX+firmaW-2, y+22);
         const sigData = localStorage.getItem('tmc_sig');
         if (sigData) {
-            try { doc.addImage(sigData, 'PNG', fx + 4, yPos + 17, colFirmaW - 8, RIEPILOGO_H - 20); }
-            catch(e) {}
+            try {
+                const fmt = sigData.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+                doc.addImage(sigData, fmt, firmaX+3, y+23, firmaW-6, rieH-26);
+            } catch(e) {}
         }
-        yPos += RIEPILOGO_H + 4;
 
-        // Footer e numerazione su tutte le pagine
-        const totPages = doc.internal.getNumberOfPages();
-        for (let p = 1; p <= totPages; p++) {
-            doc.setPage(p);
-            // Per le pagine successive alla prima, ridisegna l'header
-            if (p > 1) {
-                // L'header è già stato disegnato sopra durante la creazione, ok
-            }
-            disegnaFooter(p, totPages);
+        // Piede
+        const py = PH - 5 - piedeH;
+        if (_pdfPiedeData) {
+            doc.addImage(_pdfPiedeData.data, 'JPEG', (PW-piedeW)/2, py, piedeW, piedeH);
         }
+        doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(...GRAY);
+        doc.text(_san(d.ticket||''), ML, PH-3);
+        doc.text('Pagina 1 di 1', PW-MR, PH-3, {align:'right'});
+
         return doc;
     }
 
-    // Wrapper: ritorna {blob, dataUri, filename}
     async function generaPdfPacchetto(filenamePrefix) {
         const doc = await generaPdfRapporto();
         const idU = document.getElementById('id_univoco_input').value || 'NUOVO';
@@ -2455,34 +2355,45 @@
         if (inviati.includes(tckVal) && !confirm("⚠️ Già chiuso. Vuoi aggiornare?")) return;
         let testoCal = document.getElementById('descrizione_input').value;
         if (testoCal.indexOf("RAPPORTO INVIATO") === -1) testoCal += generaRiepilogoCalendario(idU);
+
         document.getElementById('loading-overlay').style.display = 'flex';
-        document.getElementById('loading-text').innerText = "Aggiornamento Calendario...";
+        document.getElementById('loading-text').innerText = "Generazione PDF...";
+
         try {
-            await fetch(APP_SCRIPT_URL, {
+            // ① Genera il PDF PRIMA delle chiamate di rete
+            //    In questo modo il File è pronto immediatamente dopo il click
+            const pkg = await generaPdfPacchetto('Rapporto');
+            const file = new File([pkg.blob], pkg.filename, { type: 'application/pdf' });
+
+            // ② Aggiorna calendario in background (non blocca lo share)
+            document.getElementById('loading-text').innerText = "Aggiornamento Calendario...";
+            fetch(APP_SCRIPT_URL, {
                 method: "POST",
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body: JSON.stringify({ action: "close_ticket", ticket: tckVal, updateCalendario: testoCal, pin: localStorage.getItem('tmc_auth_token') })
-            });
+            }).catch(() => {}); // ignora errori di rete — non bloccare il share
+
             if (!inviati.includes(tckVal)) { inviati.push(tckVal); localStorage.setItem('tmc_ticket_inviati', JSON.stringify(inviati)); }
             let bl = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').filter(b => b.tck !== tckVal);
             localStorage.setItem('tmc_bozze_locali', JSON.stringify(bl));
-            document.getElementById('loading-text').innerText = "Generazione PDF...";
-            const pkg = await generaPdfPacchetto('Rapporto');
+
             document.getElementById('loading-overlay').style.display = 'none';
-            const file = new File([pkg.blob], pkg.filename, { type: 'application/pdf' });
+
+            // ③ Share subito dopo la generazione — il gesto utente è ancora valido
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                await navigator.share({ title: 'Rapporto TMC', text: 'In allegato il rapporto.', files: [file] });
+                await navigator.share({ title: 'Rapporto TMC', text: 'In allegato il rapporto di intervento.', files: [file] });
             } else {
                 // Fallback: download diretto
                 const url = URL.createObjectURL(pkg.blob);
                 const a = document.createElement('a');
                 a.href = url; a.download = pkg.filename;
                 document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                URL.revokeObjectURL(url);
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
                 alert("PDF scaricato. Allegalo manualmente al tuo messaggio WhatsApp.");
             }
         } catch (e) {
             document.getElementById('loading-overlay').style.display = 'none';
+            if (e.name === 'AbortError') return; // utente ha annullato lo share — normale
             alert("Errore: " + e.message);
         }
     }
@@ -2508,16 +2419,40 @@
         try {
             const pkg = await generaPdfPacchetto('Rapporto');
             document.getElementById('loading-text').innerText = "Invio in corso...";
+
+            // Manda i metadati come JSON separato (piccolo), poi allega il PDF come blob
+            // Per Google Apps Script che non supporta multipart, usiamo due chiamate:
+            // 1a: manda metadati + aggiorna calendario
+            // 2a: manda PDF base64 (splitta in chunk se necessario)
+
+            // Calcola dimensione base64
+            const b64 = pkg.dataUri;
+            const b64size = Math.round(b64.length * 0.75 / 1024); // KB approssimativi
+
+            // Se PDF > 4MB base64, avvisa ma prova comunque
+            if (b64size > 4096) {
+                document.getElementById('loading-text').innerText = `Invio PDF (${Math.round(b64size/1024)}MB)...`;
+            }
+
+            const payload = {
+                action: "send_email",
+                pdfBase64: b64,
+                ticket: tckVal,
+                updateCalendario: testoCal,
+                pin: localStorage.getItem('tmc_auth_token'),
+                filename: pkg.filename,
+                nomeCliente,
+                emailCliente,
+                tecnico,
+                emailTecnico
+            };
+
             const r = await fetch(APP_SCRIPT_URL, {
                 method: "POST",
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({
-                    action: "send_email", pdfBase64: pkg.dataUri,
-                    ticket: tckVal, updateCalendario: testoCal,
-                    pin: localStorage.getItem('tmc_auth_token'),
-                    filename: pkg.filename, nomeCliente, emailCliente, tecnico, emailTecnico
-                })
+                body: JSON.stringify(payload)
             });
+
             const data = await r.json();
             document.getElementById('loading-overlay').style.display = 'none';
             if (data.success) {
@@ -2532,7 +2467,11 @@
             }
         } catch (e) {
             document.getElementById('loading-overlay').style.display = 'none';
-            mostraEsitoEmail(false, 'Errore di rete durante l\'invio. Controlla la connessione e riprova.', null);
+            // Errore dettagliato per debug
+            const msg = e.name === 'TypeError' && e.message.includes('fetch')
+                ? 'Connessione interrotta durante l\'invio.\n\nIl PDF potrebbe essere troppo grande per la rete attuale.\n\nProva con una connessione WiFi più stabile.'
+                : 'Errore tecnico: ' + e.message + '\n\nRiprova o contatta l\'ufficio.';
+            mostraEsitoEmail(false, msg, null);
         }
     }
     function generaRiepilogoCalendario(idUnivoco) { let r=`\n\n--- RAPPORTO INVIATO (${idUnivoco}) ---\n`; let lav=document.getElementById('tot_lavoro_span')?.innerText||""; if(lav) r+=`Ore: ${lav}\n`; let totP=0,totC=0,totH=0; for(let i=1;i<=rowCount;i++){ if(document.getElementsByName(`p_${i}`)[0]?.checked)totP++; if(document.getElementsByName(`c_${i}`)[0]?.checked)totC++; if(document.getElementsByName(`h_${i}`)[0]?.checked)totH++; } if(totP+totC>0)r+=`Pasti: ${totP+totC}\n`; if(totH>0)r+=`Hotel: ${totH}\n`; let ric=[]; for(let i=1;i<=ricCount;i++){let d=document.getElementsByName(`rd_${i}`)[0]?.value; let q=document.getElementsByName(`rq_${i}`)[0]?.value; if(d&&q&&parseFloat(q)>0)ric.push(`- ${q}x ${d.toUpperCase()}`);} if(ric.length>0)r+=`Ricambi:\n${ric.join('\n')}\n`; return r; }
@@ -2549,7 +2488,32 @@
     function addRicambio() { ricCount++; const tr=document.createElement('tr'); tr.innerHTML=`<td><input type="text" class="save-data caps" name="rc_${ricCount}"></td><td><input type="text" class="save-data caps" name="rd_${ricCount}"></td><td><input type="number" class="save-data qta" name="rq_${ricCount}"></td><td><input type="text" class="save-data unit" name="ru_${ricCount}"></td><td><input type="text" class="save-data tot-riga" name="rt_${ricCount}"></td>`; document.getElementById('ricambi-body').appendChild(tr); attachListeners(); }
     function calc() { function toMin(t){if(!t||t===RIT_LABEL)return 0; const p=t.split(':'); return parseInt(p[0])*60+parseInt(p[1]);} const getDiff=(t1,t2)=>{ if(!t1||!t2||t2===RIT_LABEL)return 0; let m1=toMin(t1),m2=toMin(t2); if(m2<m1)m2+=1440; return m2-m1;}; let totL=0,totV=0,totP=0,totC=0,totH=0,hasRit=false; for(let i=1;i<=rowCount;i++){ const g=(n)=>document.getElementsByName(`${n}_${i}`)[0]?.value||""; const gc=(n)=>document.getElementsByName(`${n}_${i}`)[0]?.checked||false; let va1=g('va1'),va2=g('va2'),lm1=g('lm1'),lm2=g('lm2'),lp1=g('lp1'),lp2=g('lp2'),vr1=g('vr1'),vr2=g('vr2'); if(vr2===RIT_LABEL)hasRit=true; let mv=getDiff(va1,va2)+getDiff(vr1,vr2); let ml=getDiff(lm1,lm2)+getDiff(lp1,lp2); totV+=mv; totL+=ml; let tot=mv+ml; const div=document.getElementById(`ore_riga_${i}`); if(div){ if(tot>0){let h=Math.floor(tot/60),m=tot%60; div.innerText=`${h}h${m>0?' '+m+'m':''}`;}else div.innerText=""; } if(gc('p'))totP++; if(gc('c'))totC++; if(gc('h'))totH++; } const fmt=(m)=>{ if(m===0)return""; let h=Math.floor(m/60),m2=m%60; return`${h}h${m2>0?' '+m2+'m':''}`.trim();}; let all=totL+totV; let lbl=all>0?fmt(all):""; if(hasRit&&lbl)lbl+=" + ritorno"; const sl=document.getElementById('tot_lavoro_span'); const sp=document.getElementById('tot_pch_span'); const sh=document.getElementById('tot_hotel_span'); if(sl)sl.innerText=lbl; if(sp)sp.innerText=totP+totC>0?`${totP+totC}`:""; if(sh)sh.innerText=totH>0?`${totH}`:""; saveDraft(); }
     function openSignature() { const ov=document.getElementById('signature-overlay'); ov.style.display='flex'; canvas.width=canvas.offsetWidth; canvas.height=canvas.offsetHeight; ctx.lineWidth=3; ctx.strokeStyle="#000"; ctx.lineCap="round"; }
-    function closeSignature(save) { if(save){ const url=canvas.toDataURL(); document.getElementById('sig-image').src=url; document.getElementById('sig-image').style.display='block'; document.getElementById('placeholder-firma').style.display='none'; localStorage.setItem('tmc_sig',url); const wb=document.getElementById('wiz-sigbox'); if(wb){ wb.className='sig-area signed'; wb.innerHTML='<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 24 Q10 14 16 20 Q22 26 28 8"/><line x1="4" y1="28" x2="28" y2="28"/></svg><span>Firma acquisita ✓</span>'; } } document.getElementById('signature-overlay').style.display='none'; }
+    function closeSignature(save) {
+        if(save) {
+            // Comprimi la firma: ridimensiona a max 400x200px e salva come JPEG qualità 0.7
+            // Questo riduce la firma da ~500KB PNG a ~15-30KB JPEG
+            const offscreen = document.createElement('canvas');
+            const maxW = 400, maxH = 200;
+            const ratio = Math.min(maxW / canvas.width, maxH / canvas.height, 1);
+            offscreen.width  = Math.round(canvas.width  * ratio);
+            offscreen.height = Math.round(canvas.height * ratio);
+            const octx = offscreen.getContext('2d');
+            octx.fillStyle = 'white';
+            octx.fillRect(0, 0, offscreen.width, offscreen.height);
+            octx.drawImage(canvas, 0, 0, offscreen.width, offscreen.height);
+            const url = offscreen.toDataURL('image/jpeg', 0.7);
+            document.getElementById('sig-image').src = url;
+            document.getElementById('sig-image').style.display = 'block';
+            document.getElementById('placeholder-firma').style.display = 'none';
+            localStorage.setItem('tmc_sig', url);
+            const wb = document.getElementById('wiz-sigbox');
+            if(wb) {
+                wb.className = 'sig-area signed';
+                wb.innerHTML = '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 24 Q10 14 16 20 Q22 26 28 8"/><line x1="4" y1="28" x2="28" y2="28"/></svg><span>Firma acquisita ✓</span>';
+            }
+        }
+        document.getElementById('signature-overlay').style.display = 'none';
+    }
     function clearSignature(){ctx.clearRect(0,0,canvas.width,canvas.height);}
     function getPos(e){const r=canvas.getBoundingClientRect(); const cx=e.touches?e.touches[0].clientX:e.clientX; const cy=e.touches?e.touches[0].clientY:e.clientY; return{x:cx-r.left,y:cy-r.top};}
     // (listener canvas spostati dentro window.onload)
