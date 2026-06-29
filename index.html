@@ -133,6 +133,29 @@
         .mat-extra-item { display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid #f5f5f5; }
         .mat-extra-item input.mat-extra-testo { flex:1; border:none; border-bottom:1px solid #cce0f5; font-size:14px; padding:4px 2px; background:transparent; }
         .mat-extra-del { background:none; border:none; color:#ff4444; font-size:18px; font-weight:bold; cursor:pointer; padding:0 4px; }
+        /* ── SELETTORE ORARIO A GRIGLIA ── */
+        .tp-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:9600; align-items:flex-end; justify-content:center; }
+        .tp-box { background:white; border-radius:14px 14px 0 0; padding:16px; width:100%; max-width:420px; box-shadow:0 -4px 24px rgba(0,0,0,0.18); }
+        .tp-title { text-align:center; font-size:13px; font-weight:bold; color:var(--tmc-blue); text-transform:uppercase; margin-bottom:10px; }
+        .tp-display { text-align:center; font-size:36px; font-weight:bold; color:var(--tmc-blue); letter-spacing:4px; margin-bottom:12px; font-variant-numeric:tabular-nums; }
+        .tp-section-label { font-size:10px; font-weight:bold; color:#aaa; text-transform:uppercase; margin-bottom:5px; }
+        .tp-grid-ore { display:grid; grid-template-columns:repeat(6,1fr); gap:5px; margin-bottom:10px; }
+        .tp-grid-min { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; margin-bottom:14px; }
+        .tp-btn { padding:10px 4px; border:1px solid #e0e8f5; border-radius:6px; font-size:14px; font-weight:bold; background:white; color:var(--tmc-dark); cursor:pointer; text-align:center; }
+        .tp-btn:active { background:#e6f1fb; }
+        .tp-btn.sel { background:var(--tmc-blue); color:white; border-color:var(--tmc-blue); }
+        .tp-actions { display:flex; gap:8px; }
+        .tp-btn-cancel { flex:1; padding:12px; border:1px solid #ddd; border-radius:7px; background:white; color:#666; font-size:14px; font-weight:bold; cursor:pointer; }
+        .tp-btn-ok { flex:2; padding:12px; border:none; border-radius:7px; background:var(--tmc-blue); color:white; font-size:14px; font-weight:bold; cursor:pointer; }
+        .tp-clear { flex:0 0 auto; padding:12px 14px; border:1px solid #ffcccc; border-radius:7px; background:white; color:#ff4444; font-size:14px; font-weight:bold; cursor:pointer; }
+        /* Pulsante orario compilato */
+        .wt-time-btn { width:100%; padding:10px 8px; border:1px solid #cce0f5; border-radius:6px; background:#f8fbff; color:var(--tmc-blue); font-size:16px; font-weight:bold; cursor:pointer; text-align:center; }
+        .wt-time-btn.vuoto { color:#bbb; background:white; border-style:dashed; font-size:13px; font-weight:normal; }
+        /* Preset orari standard */
+        .preset-bar { display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; margin-bottom:10px; }
+        .preset-btn { flex-shrink:0; padding:7px 12px; border:1px solid var(--tmc-blue); border-radius:14px; background:white; color:var(--tmc-blue); font-size:11px; font-weight:bold; cursor:pointer; white-space:nowrap; }
+        .preset-btn:active { background:var(--tmc-blue); color:white; }
+
         .ric-riga { display:flex; gap:8px; align-items:center; margin-bottom:8px; padding:10px 12px; background:#f8fbff; border:1px solid #cce0f5; border-radius:6px; }
         .ric-riga input { border:none; border-bottom:1px solid #cce0f5; padding:4px 2px; font-size:14px; background:transparent; outline:none; }
         .ric-riga input.ric-desc { flex:1; text-transform:uppercase; }
@@ -613,31 +636,6 @@
                 <div class="wiz-alert" id="werr4c" style="display:none; margin-top:10px;">⚠️ Devi prima aprire il modulo A4 e confermare la verifica.</div>
             </div>
 
-            <!-- STEP 4b: MATERIALI (condizionale) -->
-            <div class="wiz-screen" id="ws4b">
-                <div class="wiz-head">
-                    <div class="wiz-pill" id="ws4b-pill">Step 5 — Materiali</div>
-                    <h2>Quali materiali hai usato?</h2>
-                    <p>Spunta quello che hai utilizzato e correggi le quantità. Aggiungi in fondo quelli non in lista.</p>
-                </div>
-                <div class="wiz-alert" id="werr4b" style="display:none; background:#fff8e1; border-color:#ffe082; color:#7B5800;">ℹ️ Nessun materiale selezionato. Se non hai usato nulla, premi di nuovo <b>Avanti</b> per continuare.</div>
-
-                <!-- Lista dal calendario -->
-                <div id="mat-lista-calendario"></div>
-
-                <!-- Aggiungi manualmente -->
-                <div class="wiz-divider" style="margin-top:1rem"></div>
-                <div class="wiz-field">
-                    <label>➕ Aggiungi materiale non in lista</label>
-                    <div class="mat-aggiungi">
-                        <input type="text" id="mat-nuovo-testo" placeholder="Descrizione materiale..." style="text-transform:uppercase">
-                        <input type="number" id="mat-nuovo-qta" placeholder="Qtà" min="1" value="1" style="width:64px; padding:10px 8px; border:1px solid #cce0f5; border-radius:5px; font-size:14px; text-align:center;">
-                        <button class="mat-aggiungi-btn" onclick="matAggiungiExtra()">+</button>
-                    </div>
-                </div>
-                <div class="mat-extra-list" id="mat-extra-list"></div>
-            </div>
-
             <!-- STEP 5: FIRMA + RIEPILOGO -->
             <div class="wiz-screen" id="ws5">
                 <div class="wiz-head">
@@ -778,6 +776,23 @@
         </div>
     </div>
 
+    <!-- TIME PICKER A GRIGLIA -->
+    <div class="tp-overlay" id="tp-overlay">
+        <div class="tp-box">
+            <div class="tp-title" id="tp-title">Seleziona orario</div>
+            <div class="tp-display" id="tp-display">--:--</div>
+            <div class="tp-section-label">ORA</div>
+            <div class="tp-grid-ore" id="tp-grid-ore"></div>
+            <div class="tp-section-label">MINUTI</div>
+            <div class="tp-grid-min" id="tp-grid-min"></div>
+            <div class="tp-actions">
+                <button class="tp-clear" onclick="tpClear()">✕</button>
+                <button class="tp-btn-cancel" onclick="tpChiudi()">Annulla</button>
+                <button class="tp-btn-ok" onclick="tpConferma()">Conferma</button>
+            </div>
+        </div>
+    </div>
+
     <!-- FIRMA CANVAS -->
     <div id="signature-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:white; z-index:9999; flex-direction:column;">
         <div style="padding:15px; background:var(--tmc-blue); color:white; display:flex; justify-content:space-between; align-items:center;"><b>FIRMA CLIENTE</b><button onclick="closeSignature(true)" style="background:white; color:var(--tmc-blue); border:none; padding:8px 15px; border-radius:4px; font-weight:bold;">CONFERMA</button></div>
@@ -816,12 +831,8 @@
     let wizSteps = [1, 2, 3, 4, '4r', '4c', 5];
     const WIZ_NAMES_MAP = {
         1: 'Intervento', 2: 'Tecnici', 3: 'Orari',
-        4: 'Descrizione', '4r': 'Ricambi', '4b': 'Materiali', '4c': 'Anteprima A4', 5: 'Firma e invio'
+        4: 'Descrizione', '4r': 'Ricambi', '4c': 'Anteprima A4', 5: 'Firma e invio'
     };
-
-    // Materiali dal calendario
-    let matDaCalendario = [];
-    let matExtra = [];
 
     // Orari per tecnico: { nomeTecnico: {va1,va2,lm1,lm2,lp1,lp2,vr1,vr2,p,c,h} }
     // Orari multi-giornata (vedi STEP 3)
@@ -846,7 +857,7 @@
         const btnNext = document.getElementById('wiz-btn-next');
         btnNext.style.display = wizCur !== 5 ? 'block' : 'none';
         // Aggiorna pill dinamiche
-        ['4b','4c','4r'].forEach(k => {
+        ['4c','4r'].forEach(k => {
             const el = document.getElementById('ws'+k+'-pill');
             if (el) el.textContent = 'Step ' + (wizSteps.indexOf(k)+1) + ' — ' + WIZ_NAMES_MAP[k];
         });
@@ -879,23 +890,6 @@
         if (wizCur === 4)    { valid = wizVal4();   if (!valid) document.getElementById('werr4').style.display = 'block'; }
         if (wizCur === '4r') { valid = wizVal4r();  if (!valid) document.getElementById('werr4r').style.display = 'block'; else wizRicSyncA4(); }
         if (wizCur === '4c') { valid = wizVal4c();  if (!valid) document.getElementById('werr4c').style.display = 'block'; }
-        if (wizCur === '4b') {
-            // Sincronizza sempre i materiali verso A4, poi procedi
-            matSyncA4();
-            // Se nulla è selezionato, mostra avviso informativo ma non blocca
-            const hasSel = [...document.querySelectorAll('.mat-check')].some(cb => cb.checked) || matExtra.length > 0;
-            if (!hasSel) {
-                document.getElementById('werr4b').style.display = 'block';
-                // Avviso non bloccante: dopo 2 secondi procede da solo, oppure l'utente clicca ancora Avanti
-                if (!wizCur4bAvvisato) {
-                    wizCur4bAvvisato = true;
-                    return; // Prima pressione: mostra avviso
-                }
-                // Seconda pressione: procede comunque
-            }
-            wizCur4bAvvisato = false;
-            document.getElementById('werr4b').style.display = 'none';
-        }
         if (!valid) return;
         const idx = wizSteps.indexOf(wizCur);
         if (idx < wizSteps.length - 1) wizShowScreen(wizSteps[idx + 1]);
@@ -908,20 +902,10 @@
     }
 
     function hideAllWizErrors() {
-        [1,2,3,4,'4r','4b','4c',5].forEach(i => {
+        [1,2,3,4,'4r','4c',5].forEach(i => {
             const el = document.getElementById('werr' + i);
             if (el) el.style.display = 'none';
         });
-    }
-
-    // Aggiorna stepper: inserisce/rimuove '4b' (materiali calendario) dopo '4r'
-    function wizAggiornaStepper(hasMateriali) {
-        wizSteps = wizSteps.filter(s => s !== '4b');
-        if (hasMateriali) {
-            const idx4r = wizSteps.indexOf('4r');
-            wizSteps.splice(idx4r + 1, 0, '4b');
-        }
-        wizUpdateProgress();
     }
 
     // ── STEP 1: tab ticket / tecnico ─────────────────────────
@@ -1307,8 +1291,14 @@
         // Panel tecnico attivo
         const nomeTecnico = presenti[wizTabOrariAttiva];
         const o = g.orari[nomeTecnico] || {};
+
+        // Barra preset orari standard
+        const presetHtml = `<div class="preset-bar">${ORARI_PRESET.map((p,i) =>
+            `<button class="preset-btn" onclick="wizApplicaPreset(ORARI_PRESET[${i}])">⚡ ${p.label}</button>`
+        ).join('')}</div>`;
         panelsEl.innerHTML = `
         <div style="padding:10px 0;">
+            ${presetHtml}
             <div style="font-size:11px; color:#888; margin-bottom:10px; padding:6px 10px; background:#f8fbff; border-radius:5px; text-align:center;">
                 <b style="color:var(--tmc-blue);">${nomeTecnico}</b>
             </div>
@@ -1329,14 +1319,127 @@
         copiaBtn.style.display = presenti.length > 1 ? 'block' : 'none';
     }
 
+    // Preset orari standard configurabili
+    const ORARI_PRESET = [
+        { label: '8–12 / 13–17', va1:'07:30', va2:'08:00', lm1:'08:00', lm2:'12:00', lp1:'13:00', lp2:'17:00', vr1:'17:00', vr2:'17:30' },
+        { label: '7–12 / 13–16', va1:'06:30', va2:'07:00', lm1:'07:00', lm2:'12:00', lp1:'13:00', lp2:'16:00', vr1:'16:00', vr2:'16:30' },
+        { label: '8–13 solo M',  va1:'07:30', va2:'08:00', lm1:'08:00', lm2:'13:00', lp1:'',      lp2:'',      vr1:'13:00', vr2:'13:30' },
+        { label: '8–17 piena',   va1:'07:30', va2:'08:00', lm1:'08:00', lm2:'12:00', lp1:'13:00', lp2:'17:00', vr1:'17:00', vr2:'17:30' },
+    ];
+
     function renderOrariGroup(label, id1, id2, o) {
+        const v1 = o[id1] || ''; const v2 = o[id2] || '';
+        const cls1 = v1 ? 'wt-time-btn' : 'wt-time-btn vuoto';
+        const cls2 = v2 ? 'wt-time-btn' : 'wt-time-btn vuoto';
         return `<div class="orari-group">
             <div class="orari-group-label">${label}</div>
             <div class="orari-row">
-                <div><div class="orari-sub">Da</div><input type="time" id="wt_${id1}" value="${o[id1]||''}" oninput="wizSalvaOrariTabCorrente()"></div>
-                <div><div class="orari-sub">A</div><input type="time" id="wt_${id2}" value="${o[id2]||''}" oninput="wizSalvaOrariTabCorrente()"></div>
+                <div>
+                    <div class="orari-sub">Da</div>
+                    <button class="${cls1}" id="wt_${id1}_btn"
+                        onclick="tpApri('wt_${id1}','${label} — Da')">
+                        ${v1 || 'Tocca per inserire'}
+                    </button>
+                    <input type="hidden" id="wt_${id1}" value="${v1}">
+                </div>
+                <div>
+                    <div class="orari-sub">A</div>
+                    <button class="${cls2}" id="wt_${id2}_btn"
+                        onclick="tpApri('wt_${id2}','${label} — A')">
+                        ${v2 || 'Tocca per inserire'}
+                    </button>
+                    <input type="hidden" id="wt_${id2}" value="${v2}">
+                </div>
             </div>
         </div>`;
+    }
+
+    // ── TIME PICKER A GRIGLIA ────────────────────────────────
+    let tpCampoTarget = '';   // id dell'input hidden da aggiornare
+    let tpOraSelezionata  = null;  // numero 5..22
+    let tpMinSelezionato  = null;  // 0, 15, 30, 45
+
+    function tpApri(campoId, titolo) {
+        wizSalvaOrariTabCorrente();
+        tpCampoTarget = campoId;
+        document.getElementById('tp-title').textContent = titolo;
+        // Precarica valore esistente
+        const val = document.getElementById(campoId)?.value || '';
+        if (val && val.includes(':')) {
+            const [h, m] = val.split(':').map(Number);
+            tpOraSelezionata = h;
+            tpMinSelezionato = m;
+        } else {
+            tpOraSelezionata = null;
+            tpMinSelezionato = null;
+        }
+        tpRenderGriglie();
+        document.getElementById('tp-overlay').style.display = 'flex';
+    }
+
+    function tpRenderGriglie() {
+        // Display
+        const h = tpOraSelezionata !== null ? String(tpOraSelezionata).padStart(2,'0') : '--';
+        const m = tpMinSelezionato !== null ? String(tpMinSelezionato).padStart(2,'0') : '--';
+        document.getElementById('tp-display').textContent = `${h}:${m}`;
+        // Griglia ore: 5→22
+        const gOre = document.getElementById('tp-grid-ore');
+        gOre.innerHTML = '';
+        for (let h = 5; h <= 22; h++) {
+            const btn = document.createElement('button');
+            btn.className = 'tp-btn' + (tpOraSelezionata === h ? ' sel' : '');
+            btn.textContent = String(h).padStart(2,'0');
+            btn.onclick = () => { tpOraSelezionata = h; tpRenderGriglie(); };
+            gOre.appendChild(btn);
+        }
+        // Griglia minuti: 00, 15, 30, 45
+        const gMin = document.getElementById('tp-grid-min');
+        gMin.innerHTML = '';
+        [0, 15, 30, 45].forEach(m => {
+            const btn = document.createElement('button');
+            btn.className = 'tp-btn' + (tpMinSelezionato === m ? ' sel' : '');
+            btn.textContent = String(m).padStart(2,'0');
+            btn.onclick = () => { tpMinSelezionato = m; tpRenderGriglie(); };
+            gMin.appendChild(btn);
+        });
+    }
+
+    function tpConferma() {
+        if (tpOraSelezionata === null || tpMinSelezionato === null) {
+            alert('Seleziona ora e minuti.'); return;
+        }
+        const val = `${String(tpOraSelezionata).padStart(2,'0')}:${String(tpMinSelezionato).padStart(2,'0')}`;
+        const hidden = document.getElementById(tpCampoTarget);
+        if (hidden) hidden.value = val;
+        const btn = document.getElementById(tpCampoTarget + '_btn');
+        if (btn) { btn.textContent = val; btn.className = 'wt-time-btn'; }
+        wizSalvaOrariTabCorrente();
+        tpChiudi();
+    }
+
+    function tpClear() {
+        const hidden = document.getElementById(tpCampoTarget);
+        if (hidden) hidden.value = '';
+        const btn = document.getElementById(tpCampoTarget + '_btn');
+        if (btn) { btn.textContent = 'Tocca per inserire'; btn.className = 'wt-time-btn vuoto'; }
+        wizSalvaOrariTabCorrente();
+        tpChiudi();
+    }
+
+    function tpChiudi() {
+        document.getElementById('tp-overlay').style.display = 'none';
+        tpCampoTarget = '';
+    }
+
+    // Applica un preset alla giornata/tecnico corrente
+    function wizApplicaPreset(p) {
+        wizSalvaOrariTabCorrente();
+        const g = wizGiornoCorrente();
+        if (!g) return;
+        const nome = g.tecniciPresenti[wizTabOrariAttiva];
+        if (!nome) return;
+        g.orari[nome] = { va1:p.va1, va2:p.va2, lm1:p.lm1, lm2:p.lm2, lp1:p.lp1, lp2:p.lp2, vr1:p.vr1, vr2:p.vr2, p:false, c:false, h:false };
+        wizRenderGiorno();
     }
 
     function wizSalvaOrariTabCorrente() {
@@ -1357,11 +1460,13 @@
         if (!g || g.tecniciPresenti.length < 2) return;
         wizSalvaOrariTabCorrente();
         const orariBase = { ...g.orari[g.tecniciPresenti[wizTabOrariAttiva]] };
-        for (let i = 0; i < g.tecniciPresenti.length; i++) {
+        g.tecniciPresenti.forEach((_, i) => {
             if (i !== wizTabOrariAttiva) g.orari[g.tecniciPresenti[i]] = { ...orariBase };
-        }
+        });
         wizRenderGiorno();
-        alert('✅ Orari copiati su tutti i tecnici di questa giornata.');
+        // Feedback visivo senza alert
+        const btn = document.getElementById('wiz-copia-tutti-btn');
+        if (btn) { const orig = btn.textContent; btn.textContent = '✅ Copiato!'; btn.style.background = '#eaf3de'; setTimeout(() => { btn.textContent = orig; btn.style.background = ''; }, 1500); }
     }
 
     // Sincronizza tutte le giornate → righe tabella A4
@@ -1451,104 +1556,11 @@
 
     // ── MATERIALI ──────────────────────────────────────────────
     // Flag per avviso non bloccante step 4b
-    let wizCur4bAvvisato = false;
+    // (wizCur4bAvvisato rimosso: step 4b eliminato)
 
-    function wizVal4b() {
-        // Non blocca più: restituisce sempre true
-        // La sincronizzazione avviene in wizGoNext
-        document.getElementById('werr4b').style.display = 'none';
-        return true;
-    }
+    // ── FINE MATERIALI (step 4b rimosso, logica unificata in step 4r) ─────
 
-    function matBuildLista(materiali) {
-        matDaCalendario = materiali;
-        const container = document.getElementById('mat-lista-calendario');
-        container.innerHTML = '';
-        if (!materiali || materiali.length === 0) {
-            container.innerHTML = '<p style="font-size:13px; color:#888; text-align:center; padding:1rem 0;">Nessun materiale trovato nel calendario per questo intervento.</p>';
-            return;
-        }
-        materiali.forEach((mat, idx) => {
-            const div = document.createElement('div');
-            div.className = 'mat-item';
-            div.innerHTML = `
-                <input type="checkbox" class="mat-check" id="mat-cb-${idx}"
-                    onchange="matToggle(${idx}, this.checked)">
-                <label for="mat-cb-${idx}" class="mat-testo" id="mat-lbl-${idx}">${mat.testo}</label>
-                <input type="number" class="mat-qta" id="mat-qta-${idx}"
-                    value="${mat.qtaSuggerita}" min="1" disabled
-                    onchange="matSyncA4()">
-            `;
-            container.appendChild(div);
-        });
-    }
-
-    function matToggle(idx, checked) {
-        const lbl = document.getElementById('mat-lbl-' + idx);
-        const qta = document.getElementById('mat-qta-' + idx);
-        if (lbl) lbl.className = 'mat-testo' + (checked ? ' usato' : '');
-        if (qta) qta.disabled = !checked;
-        matSyncA4();
-    }
-
-    function matAggiungiExtra() {
-        const testo = document.getElementById('mat-nuovo-testo').value.trim().toUpperCase();
-        const qta   = parseInt(document.getElementById('mat-nuovo-qta').value) || 1;
-        if (!testo) { document.getElementById('mat-nuovo-testo').focus(); return; }
-        matExtra.push({ testo, qta });
-        document.getElementById('mat-nuovo-testo').value = '';
-        document.getElementById('mat-nuovo-qta').value  = '1';
-        matRenderExtra();
-        matSyncA4();
-    }
-
-    function matRenderExtra() {
-        const container = document.getElementById('mat-extra-list');
-        container.innerHTML = '';
-        matExtra.forEach((m, idx) => {
-            const div = document.createElement('div');
-            div.className = 'mat-extra-item';
-            div.innerHTML = `
-                <input type="number" value="${m.qta}" min="1" style="width:54px; padding:6px 4px; border:1px solid #cce0f5; border-radius:5px; font-size:15px; font-weight:bold; color:var(--tmc-blue); text-align:center; background:white;"
-                    onchange="matExtra[${idx}].qta=parseInt(this.value)||1; matSyncA4();">
-                <input type="text" class="mat-extra-testo" value="${m.testo}"
-                    onchange="matExtra[${idx}].testo=this.value.toUpperCase(); matSyncA4();">
-                <button class="mat-extra-del" onclick="matRimuoviExtra(${idx})">×</button>
-            `;
-            container.appendChild(div);
-        });
-    }
-
-    function matRimuoviExtra(idx) {
-        matExtra.splice(idx, 1);
-        matRenderExtra();
-        matSyncA4();
-    }
-
-    // Sincronizza materiali selezionati → tabella ricambi A4
-    function matSyncA4() {
-        // Svuota tutte le righe ricambi esistenti
-        document.getElementById('ricambi-body').innerHTML = '';
-        ricCount = 0;
-
-        // 1. Materiali dal calendario flaggati
-        matDaCalendario.forEach((mat, idx) => {
-            const cb  = document.getElementById('mat-cb-' + idx);
-            const qtaEl = document.getElementById('mat-qta-' + idx);
-            if (cb && cb.checked) {
-                addRicambioConDati('', mat.testo, qtaEl ? qtaEl.value : 1, '', '');
-            }
-        });
-
-        // 2. Materiali extra
-        matExtra.forEach(m => {
-            addRicambioConDati('', m.testo, m.qta, '', '');
-        });
-
-        calc();
-    }
-
-    // Aggiunge una riga ricambio già precompilata nella tabella A4
+    // Aggiunge una riga ricambio precompilata nella tabella A4 (usata da wizRicSyncA4)
     function addRicambioConDati(codice, descrizione, qta, unitPrice, totale) {
         ricCount++;
         const tr = document.createElement('tr');
@@ -1562,8 +1574,6 @@
         document.getElementById('ricambi-body').appendChild(tr);
         attachListeners();
     }
-
-    // ── FINE MATERIALI ─────────────────────────────────────────
 
     function wizToggleTec(btn) {
         btn.classList.toggle('sel');
@@ -1667,23 +1677,16 @@
             const el = document.getElementById(id);
             el.className = 'rv' + (el.textContent === '—' ? ' miss' : '');
         });
-        // Materiali
-        const righeMatCal = [...document.querySelectorAll('.mat-check')].filter(cb=>cb.checked).map(cb=>{
-            const idx=cb.id.replace('mat-cb-','');
-            return `${document.getElementById('mat-qta-'+idx)?.value||1}× ${document.getElementById('mat-lbl-'+idx)?.textContent||''}`;
-        });
-        const tuttiMat = [...righeMatCal, ...matExtra.map(m=>`${m.qta}× ${m.testo}`)];
+        // Nascondo wr_mat_row (non più usato — rimane nel DOM per sicurezza)
         const matRow = document.getElementById('wr_mat_row');
-        const matEl  = document.getElementById('wr_mat');
-        if (tuttiMat.length > 0) { matEl.textContent=tuttiMat.join('\n'); matRow.style.display='block'; }
-        else matRow.style.display='none';
+        if (matRow) matRow.style.display = 'none';
         // Riepilogo ricambi wizard
         const ricRow = document.getElementById('wr_ric_row');
         const ricEl  = document.getElementById('wr_ric');
         if (ricRow && ricEl) {
             if (wizRicSceltaValore === 'si' && wizRicRighe.length > 0) {
-                const forn = document.getElementById('wiz-ric-cliente')?.checked ? ' (forniti dal cliente)' : '';
-                ricEl.textContent = wizRicRighe.map(r => `${r.qta}× ${r.desc}`).join('\n') + forn;
+                const forn = document.getElementById('wiz-ric-cliente')?.checked ? '\n(ricambi forniti dal cliente)' : '';
+                ricEl.textContent = wizRicRighe.filter(r => r.desc).map(r => `${r.qta}× ${r.desc}`).join('\n') + forn;
                 ricRow.style.display = 'block';
             } else if (wizRicSceltaValore === 'no') {
                 ricEl.textContent = 'Nessun ricambio utilizzato';
@@ -1944,18 +1947,21 @@
         const conf = document.getElementById('ws4c-conferma');
         if (conf) conf.style.display = 'none';
 
-        // ── MATERIALI ──────────────────────────────────────────
-        const hasMat = data.materiali && data.materiali.length > 0;
-        wizAggiornaStepper(hasMat);
-        matExtra = [];
-        if (hasMat) {
-            matBuildLista(data.materiali);
-        } else {
-            matDaCalendario = [];
-            const c = document.getElementById('mat-lista-calendario');
-            if (c) c.innerHTML = '';
-            const el = document.getElementById('mat-extra-list');
-            if (el) el.innerHTML = '';
+        // ── MATERIALI DAL CALENDARIO → iniettati nello step Ricambi ──
+        if (data.materiali && data.materiali.length > 0) {
+            // Pre-compila le righe ricambi con i materiali dal calendario
+            // Il tecnico le troverà già nello step 4r come righe editabili
+            wizRicRighe = data.materiali.map(m => ({ desc: m.testo.toUpperCase(), qta: m.qtaSuggerita || 1 }));
+            // Imposta automaticamente "Sì" se ci sono materiali
+            wizRicSceltaValore = 'si';
+            wizRicRenderLista();
+            // Aggiorna UI pulsanti sì/no se lo step è già visibile
+            const btnNo = document.getElementById('wiz-ric-btn-no');
+            const btnSi = document.getElementById('wiz-ric-btn-si');
+            const pannello = document.getElementById('wiz-ric-pannello');
+            if (btnSi) { btnSi.style.cssText = `flex:1; padding:18px; border:2px solid var(--tmc-blue); border-radius:8px; font-size:16px; font-weight:bold; cursor:pointer; background:var(--tmc-blue); color:white;`; }
+            if (btnNo) { btnNo.style.cssText = `flex:1; padding:18px; border:1.5px solid #ccc; border-radius:8px; background:white; font-size:16px; font-weight:bold; color:#666; cursor:pointer;`; }
+            if (pannello) pannello.style.display = 'block';
         }
 
         document.getElementById('id_univoco_input').value = "";
