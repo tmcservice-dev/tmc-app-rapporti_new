@@ -2071,7 +2071,16 @@
 
     // Rimuove caratteri non Latin-1 che jsPDF non gestisce
     function _san(s) {
-        return (s || '').replace(/[^\x00-\xFF]/g, ' ').replace(/\s+/g, ' ').trim();
+        // Rimuove caratteri non Latin-1 (es. emoji) sostituendoli con spazio,
+        // normalizza solo gli spazi orizzontali (non i newline, che vanno preservati
+        // per mantenere l'a-capo tra "PROBLEMA RISCONTRATO" e "LAVORO ESEGUITO").
+        return (s || '')
+            .replace(/[^\x00-\xFF]/g, ' ')      // fuori Latin-1 → spazio
+            .split('\n')
+            .map(riga => riga.replace(/[ \t]+/g, ' ').trim())
+            .join('\n')
+            .replace(/\n{3,}/g, '\n\n')          // max una riga vuota consecutiva
+            .trim();
     }
 
     function _raccogliDatiRapporto() {
@@ -2205,8 +2214,9 @@
                 o.data||'', o.tecnico||'',
                 o.va1||'', o.va2||'', o.lm1||'', o.lm2||'',
                 o.lp1||'', o.lp2||'', o.vr1||'', o.vr2||'',
-                [(o.p?'P':''),(o.c?'C':''),(o.h?'H':'')].filter(Boolean).join('/')||''
+                '' // colonna P/C/H: contenuto vuoto, disegnata interamente in didDrawCell
             ]);
+            const pchFlags = (d.orari.length ? d.orari : [{}]).map(o => ({ p: !!o.p, c: !!o.c, h: !!o.h }));
             doc.autoTable({
                 startY: y,
                 head:[[
@@ -2222,10 +2232,40 @@
                 theme:'grid',
                 styles:{fontSize:7,cellPadding:1.3,lineColor:BLUE,lineWidth:0.2,textColor:BLACK,halign:'center',font:'helvetica',valign:'middle'},
                 headStyles:{fillColor:LBLUE,textColor:BLUE,fontStyle:'bold',fontSize:6.5,halign:'center'},
-                columnStyles:{0:{cellWidth:18},1:{cellWidth:36,halign:'left'},10:{cellWidth:11}},
+                columnStyles:{0:{cellWidth:18},1:{cellWidth:36,halign:'left'},10:{cellWidth:17}},
                 margin:{left:ML,right:MR},
                 pageBreak:'avoid',
-                tableWidth: CW
+                tableWidth: CW,
+                didDrawCell: function(data) {
+                    // Disegna le 3 mini-checkbox P/C/H solo nelle righe di corpo, colonna indice 10
+                    if (data.section === 'body' && data.column.index === 10) {
+                        const riga = pchFlags[data.row.index] || { p:false, c:false, h:false };
+                        const cellX = data.cell.x, cellY = data.cell.y;
+                        const cellW = data.cell.width, cellH = data.cell.height;
+                        const box = 2.0;             // lato del quadratino in mm
+                        const gap = 1.0;
+                        const labels = [['P', riga.p], ['C', riga.c], ['H', riga.h]];
+                        const totW = labels.length * box + (labels.length - 1) * gap;
+                        let cx = cellX + (cellW - totW) / 2;
+                        const cy = cellY + (cellH - box) / 2;
+                        labels.forEach(([lettera, flag]) => {
+                            doc.setDrawColor(...BLUE); doc.setLineWidth(0.2);
+                            if (flag) {
+                                doc.setFillColor(...BLUE);
+                                doc.rect(cx, cy, box, box, 'FD'); // riempito + bordo = flaggato
+                                doc.setTextColor(255,255,255);
+                            } else {
+                                doc.setFillColor(255,255,255);
+                                doc.rect(cx, cy, box, box, 'FD'); // vuoto + bordo = non flaggato
+                                doc.setTextColor(...GRAY);
+                            }
+                            doc.setFont('helvetica','bold');
+                            doc.setFontSize(3.6);
+                            doc.text(lettera, cx + box/2, cy + box*0.78, { align:'center' });
+                            cx += box + gap;
+                        });
+                    }
+                }
             });
             y = doc.lastAutoTable.finalY + 3;
 
@@ -2282,6 +2322,13 @@
         doc.setFont('helvetica','normal'); doc.setFontSize(descrFontSize); doc.setTextColor(...BLACK);
         const descrLines = doc.splitTextToSize(_san(d.descr || '—'), CW-6);
 
+        // Individua l'indice della riga separatore "----..." che precede "LAVORO ESEGUITO:"
+        // così possiamo evitare che vada a fine pagina da sola (riga orfana).
+        let idxSeparatore = -1;
+        for (let i = 0; i < descrLines.length; i++) {
+            if (/^-{5,}$/.test(descrLines[i].trim())) { idxSeparatore = i; break; }
+        }
+
         // Lo spazio per la firma va riservato SOLO sull'ultima pagina.
         const RIE_H = 46;
         let li = 0;
@@ -2306,6 +2353,18 @@
                 spazioFirma = 0;
                 spazio = BOTTOM_Y - y - 4;
                 nRighe = Math.max(1, Math.floor(spazio / descrLineH));
+            }
+
+            // Evita che il separatore "----..." (e la riga "LAVORO ESEGUITO:" subito dopo)
+            // restino isolati come ultima riga della pagina: se cadono proprio nelle
+            // ultime 2 posizioni della fetta corrente, accorcia la fetta per spingerli
+            // entrambi all'inizio della pagina successiva.
+            if (idxSeparatore >= li && idxSeparatore <= li + nRighe - 1) {
+                const posizioneNellaFetta = idxSeparatore - li;
+                const righeDopoSeparatoreNellaFetta = nRighe - posizioneNellaFetta; // ----, LAVORO ESEGUITO:, eventuale riga vuota
+                if (righeDopoSeparatoreNellaFetta < 3 && posizioneNellaFetta > 0) {
+                    nRighe = posizioneNellaFetta; // taglia prima del separatore
+                }
             }
 
             const fetta = descrLines.slice(li, li + nRighe);
