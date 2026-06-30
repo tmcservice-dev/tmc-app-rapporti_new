@@ -559,7 +559,7 @@
 
                 <!-- Lavoro eseguito — scrittura libera -->
                 <div class="wiz-field" style="margin-top:.75rem">
-                    <label>\n\🔧 Lavoro eseguito\n <span style="color:#A32D2D;">*</span></label>
+                    <label>🔧 Lavoro eseguito <span style="color:#A32D2D;">*</span></label>
                     <textarea id="w_lavoro" rows="5"
                         placeholder="Descrivi gli interventi eseguiti..."
                         oninput="this.value=this.value.toUpperCase(); wizContaChar(); wizAggiornaTesto();"></textarea>
@@ -568,7 +568,7 @@
 
                 <!-- Stato finale fisso -->
                 <div style="background:#e6f1fb; border-radius:5px; padding:10px 12px; font-size:12px; font-weight:bold; color:#0c447c; margin-top:4px;">
-                    \n\n✅ MACCHINA LASCIATA AL CLIENTE IN FUNZIONE E IN CONDIZIONE DI SICUREZZA
+                    ✅ MACCHINA LASCIATA AL CLIENTE IN FUNZIONE E IN CONDIZIONE DI SICUREZZA
                 </div>
 
                 <!-- Campo nascosto che contiene il testo unificato sincronizzato con A4 -->
@@ -2031,8 +2031,8 @@
     // ════════════════════════════════════════════════════════════
     // GENERAZIONE PDF CON jsPDF (deterministico, identico su ogni device)
     // ════════════════════════════════════════════════════════════
-    // GENERAZIONE PDF — una pagina, layout compatto
-    // ════════════════════════════════════════════════════════════
+    // Banner e piede caricati da file reale (static/intestazione.jpg, static/piede.jpg)
+    // Qualità alta per restare nitidi; caricati una sola volta e riusati su ogni pagina.
     let _pdfBannerData = null, _pdfPiedeData = null, _pdfImgPromise = null;
 
     function _caricaImmagine(url) {
@@ -2040,11 +2040,20 @@
             const img = new Image();
             img.crossOrigin = 'anonymous';
             img.onload = () => {
+                // Usa le dimensioni native dell'immagine senza ridimensionarla:
+                // ridurre la risoluzione qui è la causa principale di un logo sgranato nel PDF.
                 const c = document.createElement('canvas');
-                c.width = img.naturalWidth; c.height = img.naturalHeight;
-                c.getContext('2d').drawImage(img, 0, 0);
-                try { resolve({ data: c.toDataURL('image/jpeg', 0.82), w: img.naturalWidth, h: img.naturalHeight }); }
-                catch(e) { resolve(null); }
+                c.width = img.naturalWidth;
+                c.height = img.naturalHeight;
+                const cx = c.getContext('2d');
+                cx.imageSmoothingEnabled = true;
+                cx.imageSmoothingQuality = 'high';
+                cx.drawImage(img, 0, 0);
+                try {
+                    // Qualità alta (0.95): per loghi con testo piccolo, una compressione
+                    // troppo aggressiva è ciò che genera l'effetto sgranato nel PDF finale.
+                    resolve({ data: c.toDataURL('image/jpeg', 0.95), w: img.naturalWidth, h: img.naturalHeight });
+                } catch(e) { resolve(null); }
             };
             img.onerror = () => resolve(null);
             img.src = url;
@@ -2111,26 +2120,46 @@
         const d = _raccogliDatiRapporto();
 
         const PW=210, PH=297, ML=8, MR=8, CW=194;
-        const BLUE=[0,84,166], LBLUE=[240,247,255], GRAY=[120,120,120], BLACK=[20,20,20];
+        const BLUE=[0,84,166], BLUE_DARK=[0,58,116], LBLUE=[240,247,255], GRAY=[120,120,120], BLACK=[20,20,20], SILVER=[170,178,188];
 
-        const bannerH = _pdfBannerData ? (CW * _pdfBannerData.h / _pdfBannerData.w) : 0;
-        const piedeW  = CW * 0.50;
-        const piedeH  = _pdfPiedeData  ? (piedeW * _pdfPiedeData.h  / _pdfPiedeData.w)  : 8;
-        const PIEDE_RESERVE = piedeH + 8;            // spazio in fondo riservato al piede
-        const BOTTOM_Y = PH - PIEDE_RESERVE;          // y oltre cui non si disegna contenuto
+        // Altezza calcolata dalle proporzioni reali dell'immagine (mantiene l'aspect ratio originale)
+        const bannerH = _pdfBannerData ? (CW * _pdfBannerData.h / _pdfBannerData.w) : 24;
+        const piedeW  = CW * 0.5;
+        const piedeH  = _pdfPiedeData  ? (piedeW * _pdfPiedeData.h / _pdfPiedeData.w) : 12;
+        const PIEDE_RESERVE = piedeH + 8;
+        const BOTTOM_Y = PH - PIEDE_RESERVE;
 
         let pageNum = 0;
         const lbl = (t,x,yy) => { doc.setFont('helvetica','bold'); doc.setFontSize(6); doc.setTextColor(...BLUE); doc.text(t,x,yy); };
         const val = (t,x,yy,sz,bold) => { doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(sz||9); doc.setTextColor(...BLACK); doc.text(_san(t),x,yy); };
 
+        // ── LOGO TMC: immagine reale intestazione.jpg (alta qualità) ──
+        function disegnaLogoImmagine(x, y, w) {
+            if (!_pdfBannerData) return y; // fallback: nessun avanzamento se manca l'immagine
+            doc.addImage(_pdfBannerData.data, 'JPEG', x, y, w, bannerH, undefined, 'SLOW');
+            let yy = y + bannerH + 1;
+            // Barra diagonale decorativa sotto al banner, coerente con lo stile originale
+            const barY = yy + 1.5;
+            const barH = 2.0;
+            doc.setFillColor(...SILVER);
+            doc.rect(x, barY, w, barH * 0.5, 'F');
+            doc.setFillColor(...BLUE);
+            doc.triangle(x, barY - barH*0.35, x, barY + barH*1.4, x + w*0.6, barY + barH*0.5, 'F');
+            doc.rect(x, barY - barH*0.35, w*0.5, barH*1.75, 'F');
+            return barY + barH*1.75 + 2;
+        }
+        // ── FOOTER: immagine reale piede.jpg (alta qualità) ──────
+        function disegnaFooterImmagine() {
+            if (_pdfPiedeData) {
+                doc.addImage(_pdfPiedeData.data, 'JPEG', (PW-piedeW)/2, PH-piedeH-3, piedeW, piedeH, undefined, 'SLOW');
+            }
+        }
+
         // ── HEADER COMPLETO (ripetuto su OGNI pagina) ─────────────
         function disegnaHeaderCompleto() {
             let y = 6;
-            // Banner
-            if (_pdfBannerData) {
-                doc.addImage(_pdfBannerData.data, 'JPEG', ML, y, CW, bannerH, undefined, 'FAST');
-                y += bannerH + 2;
-            }
+            // Banner vettoriale
+            y = disegnaLogoImmagine(ML, y, CW);
             // Titolo + badge tipo
             doc.setDrawColor(...BLUE); doc.setLineWidth(0.6);
             doc.line(ML, y, PW-MR, y); y += 4;
@@ -2146,28 +2175,29 @@
             doc.setDrawColor(...BLUE); doc.setLineWidth(0.4);
             doc.line(ML, y, PW-MR, y); y += 3;
 
-            // Box cliente/tecnico
+            // Box cliente/tecnico — campi allineati su griglia precisa
             const cHalf = CW/2-1;
-            const BOX_H = 30;
+            const BOX_H = 33;
             doc.setDrawColor(...BLUE); doc.setLineWidth(0.25);
             doc.roundedRect(ML, y, cHalf, BOX_H, 1, 1, 'S');
             doc.roundedRect(ML+cHalf+2, y, cHalf, BOX_H, 1, 1, 'S');
-            lbl('TECNICO/I INCARICATO/I', ML+2, y+4);
+            const padX = 3, padTop = 4.5;
+            lbl('TECNICO/I INCARICATO/I', ML+padX, y+padTop);
             doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...BLACK);
-            const tecWrap = doc.splitTextToSize(_san(d.tecnici.join(', ')||'—'), cHalf-4);
-            doc.text(tecWrap.slice(0,3), ML+2, y+8);
-            lbl('MEZZO DI TRASPORTO', ML+2, y+22);
-            val(d.mezzo||'—', ML+2, y+26, 8, false);
-            const rx = ML+cHalf+4;
-            lbl('CLIENTE', rx, y+4);
+            const tecWrap = doc.splitTextToSize(_san(d.tecnici.join(', ')||'—'), cHalf-padX-2);
+            doc.text(tecWrap.slice(0,3), ML+padX, y+padTop+4);
+            lbl('MEZZO DI TRASPORTO', ML+padX, y+23.5);
+            val(d.mezzo||'—', ML+padX, y+28, 8, false);
+            const rx = ML+cHalf+2+padX;
+            lbl('CLIENTE', rx, y+padTop);
             doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...BLACK);
-            doc.text(_san(d.cliente||'—'), rx, y+9);
-            lbl('SEDE INTERVENTO', rx, y+13);
-            doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...BLACK);
-            const sedeWrap = doc.splitTextToSize(_san(d.indirizzo||'—'), cHalf-4);
-            doc.text(sedeWrap.slice(0,2), rx, y+17);
-            lbl('MACCHINA / MATRICOLA', rx, y+24);
-            val(d.macchina||'—', rx, y+28, 8, false);
+            doc.text(_san(d.cliente||'—'), rx, y+padTop+5);
+            lbl('SEDE INTERVENTO', rx, y+13.5);
+            doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...BLACK);
+            const sedeWrap = doc.splitTextToSize(_san(d.indirizzo||'—'), cHalf-padX-2);
+            doc.text(sedeWrap.slice(0,2), rx, y+17.3);
+            lbl('MACCHINA / MATRICOLA', rx, y+25.5);
+            val(d.macchina||'—', rx, y+29.7, 8, false);
             y += BOX_H + 3;
 
             // Tabella orari (sempre ripetuta)
@@ -2190,7 +2220,7 @@
                 ],['DA','A','DA','A','DA','A','DA','A']],
                 body: orariBody,
                 theme:'grid',
-                styles:{fontSize:7,cellPadding:1.3,lineColor:BLUE,lineWidth:0.2,textColor:BLACK,halign:'center',font:'helvetica'},
+                styles:{fontSize:7,cellPadding:1.3,lineColor:BLUE,lineWidth:0.2,textColor:BLACK,halign:'center',font:'helvetica',valign:'middle'},
                 headStyles:{fillColor:LBLUE,textColor:BLUE,fontStyle:'bold',fontSize:6.5,halign:'center'},
                 columnStyles:{0:{cellWidth:18},1:{cellWidth:36,halign:'left'},10:{cellWidth:11}},
                 margin:{left:ML,right:MR},
@@ -2207,7 +2237,7 @@
                     body: d.ricambi.map(r=>[r.codice,r.descrizione,r.qta,r.unit,r.tot]),
                     foot: d.totaleMat ? [[{content:'TOTALE:',colSpan:4,styles:{halign:'right',fontStyle:'bold'}},d.totaleMat]] : [],
                     theme:'grid',
-                    styles:{fontSize:7.5,cellPadding:1.3,lineColor:BLUE,lineWidth:0.2,textColor:BLACK},
+                    styles:{fontSize:7.5,cellPadding:1.3,lineColor:BLUE,lineWidth:0.2,textColor:BLACK,valign:'middle'},
                     headStyles:{fillColor:LBLUE,textColor:BLUE,fontStyle:'bold',fontSize:7},
                     footStyles:{fillColor:[248,251,255],textColor:BLUE,fontStyle:'bold'},
                     columnStyles:{0:{cellWidth:20},1:{halign:'left'},2:{cellWidth:14,halign:'center'},3:{cellWidth:20,halign:'right'},4:{cellWidth:20,halign:'right'}},
@@ -2221,9 +2251,7 @@
         }
 
         function disegnaPiedePagina(numPag, totPag) {
-            if (_pdfPiedeData) {
-                doc.addImage(_pdfPiedeData.data, 'JPEG', (PW-piedeW)/2, PH-5-piedeH, piedeW, piedeH, undefined, 'FAST');
-            }
+            disegnaFooterImmagine();
             doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(...GRAY);
             doc.text(_san(d.ticket||''), ML, PH-3);
             doc.text(`Pagina ${numPag} di ${totPag}`, PW-MR, PH-3, {align:'right'});
