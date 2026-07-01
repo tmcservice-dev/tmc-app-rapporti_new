@@ -817,6 +817,29 @@
     </div>
 
     <script>
+    // ── RILEVATORE ERRORI GLOBALE ──────────────────────────────
+    // Su iOS Safari un errore JavaScript non gestito spesso non produce
+    // alcun segnale visibile: il tocco su un pulsante "non fa nulla".
+    // Questi listener intercettano qualsiasi errore (sincrono o in una
+    // Promise) e lo mostrano a schermo, per capire subito cosa si è rotto.
+    window.addEventListener('error', function(e) {
+        try {
+            document.getElementById('loading-overlay').style.display = 'none';
+        } catch(_) {}
+        alert('⚠️ ERRORE TECNICO\n\n' + (e.message || 'Errore sconosciuto') +
+              '\n\nFile: ' + (e.filename ? e.filename.split('/').pop() : '—') +
+              ' — riga ' + (e.lineno || '—') +
+              '\n\nFai uno screenshot e mandalo all\'ufficio.');
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+        try {
+            document.getElementById('loading-overlay').style.display = 'none';
+        } catch(_) {}
+        const msg = (e.reason && e.reason.message) ? e.reason.message : String(e.reason);
+        alert('⚠️ ERRORE TECNICO (rete/dati)\n\n' + msg +
+              '\n\nFai uno screenshot e mandalo all\'ufficio.');
+    });
+
     const APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwflYcjnY-wzmJBmf8LlRh00vDx-L4ckMISLP27b6Upz7x6eK-1HJeb4EAywFI2R2RxlA/exec";
     const FRASE_SICUREZZA = "";
     const RIT_LABEL = "+ RIT.";
@@ -1774,12 +1797,17 @@
     async function wizSync() {
         if (s1Modalita === 'tecnico') {
             if (!s1TecnicoSelezionato) { alert('Seleziona prima il tuo nome dalla lista!'); return; }
-            document.getElementsByName('tecnico_1')[0].value = s1TecnicoSelezionato;
+            const t1El = document.getElementsByName('tecnico_1')[0];
+            if (!t1El) { alert('Errore: campo tecnico non trovato. Ricarica la pagina.'); return; }
+            t1El.value = s1TecnicoSelezionato;
             await importaDaCalendario('tecnico');
         } else {
-            const tck = document.getElementById('w_ticket').value.trim();
+            const wTicketEl = document.getElementById('w_ticket');
+            if (!wTicketEl) { alert('Errore: campo ticket non trovato. Ricarica la pagina.'); return; }
+            const tck = wTicketEl.value.trim();
             if (!tck) { alert('Inserisci prima il numero di ticket!'); return; }
-            document.getElementById('n_rapporto_input').value = tck;
+            const nRapportoEl = document.getElementById('n_rapporto_input');
+            if (nRapportoEl) nRapportoEl.value = tck;
             await importaDaCalendario('ticket');
         }
     }
@@ -1962,11 +1990,36 @@
         if(!navigator.onLine) return alert("Connettiti per interrogare il calendario!");
         const pin = localStorage.getItem('tmc_auth_token');
         const body = { action: "get_calendar", pin };
-        if(mode === 'tecnico') { const t1 = document.getElementsByName('tecnico_1')[0].value; if(!t1) return alert("Inserisci un tecnico!"); body.tecnico = t1; }
-        else if(mode === 'ticket') { const tck = document.getElementById('n_rapporto_input').value; if(!tck) return alert("Scrivi un numero di ticket!"); body.ticket = tck; }
+        if(mode === 'tecnico') {
+            const t1El = document.getElementsByName('tecnico_1')[0];
+            if (!t1El) return alert("Errore: campo tecnico non trovato. Ricarica la pagina.");
+            const t1 = t1El.value;
+            if(!t1) return alert("Inserisci un tecnico!");
+            body.tecnico = t1;
+        } else if(mode === 'ticket') {
+            const tckEl = document.getElementById('n_rapporto_input');
+            if (!tckEl) return alert("Errore: campo ticket non trovato. Ricarica la pagina.");
+            const tck = tckEl.value;
+            if(!tck) return alert("Scrivi un numero di ticket!");
+            body.ticket = tck;
+        }
         document.getElementById('loading-overlay').style.display = 'flex';
         document.getElementById('loading-text').innerText = "Ricerca in corso...";
-        try { const response = await fetch(APP_SCRIPT_URL, { method:"POST", headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(body) }); const data = await response.json(); document.getElementById('loading-overlay').style.display = 'none'; if(data.results && data.results.length > 0) { if(data.results.length === 1) applicaDatiCalendario(data.results[0]); else mostraSelezioneTicket(data.results); } else { alert(mode==='tecnico' ? "Nessun evento OGGI per questo tecnico." : "Nessun evento per questo Ticket."); } } catch(e) { document.getElementById('loading-overlay').style.display = 'none'; alert("Errore connessione."); }
+        try {
+            const response = await fetch(APP_SCRIPT_URL, { method:"POST", headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(body) });
+            if (!response.ok) throw new Error('Risposta server: ' + response.status);
+            const data = await response.json();
+            document.getElementById('loading-overlay').style.display = 'none';
+            if(data.results && data.results.length > 0) {
+                if(data.results.length === 1) applicaDatiCalendario(data.results[0]);
+                else mostraSelezioneTicket(data.results);
+            } else {
+                alert(mode==='tecnico' ? "Nessun evento OGGI per questo tecnico." : "Nessun evento per questo Ticket.");
+            }
+        } catch(e) {
+            document.getElementById('loading-overlay').style.display = 'none';
+            alert("Errore connessione: " + e.message);
+        }
     }
     function mostraSelezioneTicket(results) { const container = document.getElementById('lista-ticket-trovati'); container.innerHTML = ""; results.forEach(res => { const btn = document.createElement('button'); btn.className='ticket-btn'; btn.innerHTML=`<b>${res.tck||'Senza TCK'}</b> - ${res.cliente||'Senza Cliente'}<br><span style="font-size:10px; color:#666;">${res.problema||''}</span>`; btn.onclick=() => { document.getElementById('select-ticket-overlay').style.display='none'; applicaDatiCalendario(res); }; container.appendChild(btn); }); document.getElementById('select-ticket-overlay').style.display='flex'; }
     function applicaDatiCalendario(data) {
@@ -1976,12 +2029,15 @@
         document.getElementById('indirizzo_input').value   = (data.indirizzo || "").toUpperCase();
         document.getElementById('email_input').value       = data.email ? data.email.toLowerCase() : "";
         const resp = document.getElementsByName('nome_responsabile')[0];
-        if(data.contatto) resp.value = data.contatto.toUpperCase();
-        else if(data.email) resp.value = data.email.split('@')[0].replace(/\./g,' ').toUpperCase();
+        if (resp) {
+            if(data.contatto) resp.value = data.contatto.toUpperCase();
+            else if(data.email) resp.value = data.email.split('@')[0].replace(/\./g,' ').toUpperCase();
+        }
         const container = document.getElementById('lista-tecnici-inputs');
         while(container.children.length > 1) container.removeChild(container.lastChild);
         if(data.tecnici && data.tecnici.length > 0) {
-            document.getElementsByName('tecnico_1')[0].value = data.tecnici[0].toUpperCase();
+            const t1El = document.getElementsByName('tecnico_1')[0];
+            if (t1El) t1El.value = data.tecnici[0].toUpperCase();
             if(document.getElementsByName('tec_1')[0]) document.getElementsByName('tec_1')[0].value = data.tecnici[0].toUpperCase();
             for(let i=1; i<data.tecnici.length; i++) aggiungiRigaTecnico(data.tecnici[i].toUpperCase(), true);
             document.querySelectorAll('#wiz-tec-grid .tec-btn').forEach(btn => {
