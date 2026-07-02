@@ -2326,6 +2326,14 @@
 
         // ── PRIMA PAGINA: header leggero ────────────────────────────
         let y = nuovaPagina();
+        // L'header leggero ha altezza FISSA (i box cliente/tecnico hanno
+        // altezza costante BOX_H indipendentemente dal contenuto), quindi
+        // "y" qui rappresenta esattamente lo spazio che l'header occuperà
+        // su OGNI pagina. Lo usiamo come margine superiore reale per le
+        // tabelle, così se una tabella continua da sola su una nuova
+        // pagina (perché troppo lunga), la sua riga di continuazione
+        // parte SOTTO l'header e non ci si sovrappone più.
+        const HEADER_RESERVE = y;
 
         // ── TABELLA ORARI — disegnata UNA SOLA VOLTA ────────────────
         // Se la tabella stessa è troppo lunga per una pagina, autoTable
@@ -2355,11 +2363,13 @@
             styles:{fontSize:7,cellPadding:1.3,lineColor:BLUE,lineWidth:0.2,textColor:BLACK,halign:'center',font:'helvetica',valign:'middle'},
             headStyles:{fillColor:LBLUE,textColor:BLUE,fontStyle:'bold',fontSize:6.5,halign:'center'},
             columnStyles:{0:{cellWidth:18},1:{cellWidth:36,halign:'left'},10:{cellWidth:17}},
-            margin:{left:ML,right:MR,top:6},
+            margin:{left:ML,right:MR,top:HEADER_RESERVE,bottom:PIEDE_RESERVE},
             tableWidth: CW,
             didDrawPage: function(dataHook) {
                 // Fires solo se la tabella STESSA non entra in una pagina e ne serve una nuova:
                 // in tal caso ridisegniamo SOLO l'header leggero (mai le tabelle da capo).
+                // Grazie a margin.top=HEADER_RESERVE la tabella riparte SEMPRE sotto
+                // l'header, quindi non c'è più sovrapposizione visiva.
                 if (dataHook.pageNumber > 1 && dataHook.pageNumber > pageNum) {
                     pageNum = dataHook.pageNumber;
                     disegnaHeaderLeggero();
@@ -2410,7 +2420,7 @@
                 headStyles:{fillColor:LBLUE,textColor:BLUE,fontStyle:'bold',fontSize:7},
                 footStyles:{fillColor:[248,251,255],textColor:BLUE,fontStyle:'bold'},
                 columnStyles:{0:{cellWidth:20},1:{halign:'left'},2:{cellWidth:14,halign:'center'},3:{cellWidth:20,halign:'right'},4:{cellWidth:20,halign:'right'}},
-                margin:{left:ML,right:MR,top:6},
+                margin:{left:ML,right:MR,top:HEADER_RESERVE,bottom:PIEDE_RESERVE},
                 tableWidth: CW,
                 didDrawPage: function(dataHook) {
                     if (dataHook.pageNumber > 1 && dataHook.pageNumber > pageNum) {
