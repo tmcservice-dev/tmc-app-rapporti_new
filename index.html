@@ -746,6 +746,9 @@
                 <button class="btn btn-dark" onclick="addRicambio()">+ RICAMBIO</button>
                 <button class="btn btn-orange" style="background:#ff9800; min-width:100%;" onclick="apriBozze()">📂 ARCHIVIO BOZZE</button>
                 <button class="btn btn-blue" onclick="salvaPDF()">💾 SALVA PDF</button>
+                <button class="btn btn-dark" style="background:#009688;" onclick="esportaDatiJSON()">📤 ESPORTA JSON</button>
+                <button class="btn btn-dark" style="background:#795548;" onclick="document.getElementById('import-json-input').click()">📥 IMPORTA JSON</button>
+                <input type="file" id="import-json-input" accept="application/json,.json" style="display:none;" onchange="importaDatiJSON(this.files[0])">
                 <button class="btn btn-green" onclick="condividiWhatsApp()">WHATSAPP + CALENDARIO</button>
                 <button class="btn btn-orange" style="background:#e91e63;" onclick="inviaEmailAutomaticamente()">INVIA EMAIL + CALENDARIO</button>
                 <button class="btn" style="background:red;" onclick="nuovoRapporto()">RESET NUOVO</button>
@@ -1970,6 +1973,92 @@
     function caricaBozzaLocale(tck) { if(!confirm("Caricare questa bozza?")) return; const b = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').find(b => b.tck === tck); if(b) applicaDatiBozza(b.payload); }
     function caricaBozzaCloud(index) { if(!confirm("Caricare questa bozza dal Cloud?")) return; const b = window.bozzeCloud[index]; if(b) applicaDatiBozza(JSON.parse(b.dati)); }
     function applicaDatiBozza(jsonData) { try { localStorage.setItem('tmc_bozza', JSON.stringify(jsonData.inputs || {})); localStorage.setItem('tmc_counts', JSON.stringify(jsonData.counts || {r:1, ric:1})); if (jsonData.sig) localStorage.setItem('tmc_sig', jsonData.sig); else localStorage.removeItem('tmc_sig'); document.getElementById('drafts-overlay').style.display = 'none'; loadDraft(); } catch(e) { alert("Errore lettura bozza."); } }
+
+    // ═══════════════════════════════════════════════
+    // ESPORTA / IMPORTA JSON — backup completo su file locale
+    // (diverso dall'archivio bozze: qui il file resta sul dispositivo,
+    // scaricabile, condivisibile, nessuna dipendenza dal cloud)
+    // ═══════════════════════════════════════════════
+    function esportaDatiJSON() {
+        // Dati di tutti i campi del modulo A4 (stesso meccanismo delle bozze)
+        const dataInputs = {};
+        document.querySelectorAll('.save-data').forEach(el => {
+            dataInputs[el.name] = (el.type === 'checkbox' ? el.checked : el.value);
+        });
+
+        const pacchetto = {
+            _tipo: 'tmc_rapportino_backup',
+            _versione: 1,
+            _esportatoIl: new Date().toISOString(),
+            inputs: dataInputs,
+            counts: { r: rowCount, ric: ricCount },
+            firma: localStorage.getItem('tmc_sig') || null,
+            firmaRatio: localStorage.getItem('tmc_sig_ratio') || null,
+            // Stato specifico del wizard, per ripristinare anche lì la sessione
+            wizard: {
+                giornate: wizGiornate,
+                tecExtra: wizTecExtra,
+                ricDaCalendario: wizRicDaCalendario,
+                ricManuali: wizRicManuali,
+                ricSceltaValore: wizRicSceltaValore
+            }
+        };
+
+        const ticket = document.getElementById('n_rapporto_input').value || 'rapportino';
+        const nomeFile = `Backup_${ticket.replace(/[\/\\]/g, '-')}_${Date.now()}.json`;
+        const blob = new Blob([JSON.stringify(pacchetto, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = nomeFile;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function importaDatiJSON(file) {
+        if (!file) return;
+        if (!confirm('Caricare questo file? I dati attualmente compilati verranno sostituiti.')) {
+            document.getElementById('import-json-input').value = '';
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const pacchetto = JSON.parse(e.target.result);
+                if (pacchetto._tipo !== 'tmc_rapportino_backup') {
+                    alert('⚠️ Questo file non sembra un backup valido di TMC Service.');
+                    return;
+                }
+                // Ripristina i campi del modulo A4
+                localStorage.setItem('tmc_bozza', JSON.stringify(pacchetto.inputs || {}));
+                localStorage.setItem('tmc_counts', JSON.stringify(pacchetto.counts || { r:1, ric:1 }));
+                if (pacchetto.firma) {
+                    localStorage.setItem('tmc_sig', pacchetto.firma);
+                    if (pacchetto.firmaRatio) localStorage.setItem('tmc_sig_ratio', pacchetto.firmaRatio);
+                } else {
+                    localStorage.removeItem('tmc_sig');
+                    localStorage.removeItem('tmc_sig_ratio');
+                }
+                // Ripristina lo stato del wizard, se presente nel backup
+                if (pacchetto.wizard) {
+                    wizGiornate = pacchetto.wizard.giornate || [];
+                    wizTecExtra = pacchetto.wizard.tecExtra || [];
+                    wizRicDaCalendario = pacchetto.wizard.ricDaCalendario || [];
+                    wizRicManuali = pacchetto.wizard.ricManuali || [];
+                    wizRicSceltaValore = pacchetto.wizard.ricSceltaValore ?? null;
+                    wizGiornoIdx = 0;
+                    wizTabOrariAttiva = 0;
+                }
+                loadDraft();
+                alert('✅ Backup caricato correttamente.');
+            } catch (err) {
+                alert('⚠️ Errore nella lettura del file: ' + err.message);
+            } finally {
+                document.getElementById('import-json-input').value = '';
+            }
+        };
+        reader.onerror = () => alert('⚠️ Impossibile leggere il file.');
+        reader.readAsText(file);
+    }
     function eliminaBozzaLocale(tck) { if(!confirm("Cancellare questa bozza?")) return; let b = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').filter(x => x.tck !== tck); localStorage.setItem('tmc_bozze_locali', JSON.stringify(b)); aggiornaListaBozzeLocali(); }
     async function eliminaBozzaCloudUI(tck) { if(!navigator.onLine) return alert("Offline!"); if(!confirm("Eliminare dal Cloud?")) return; document.getElementById('lista-bozze-cloud').innerHTML = "<p>Eliminazione... ⏳</p>"; try { await fetch(APP_SCRIPT_URL, { method: "POST", headers: {'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({ action:"delete_cloud", tck, pin:localStorage.getItem('tmc_auth_token') }) }); apriBozze(); } catch(e) { alert("Errore rete"); } }
     async function sincronizzaManualmente(tck) { if(!navigator.onLine) return alert("Offline!"); const b = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').find(x => x.tck === tck); if(!b) return; document.getElementById('loading-overlay').style.display = 'flex'; document.getElementById('loading-text').innerText = "Invio al Cloud..."; try { const res = await fetch(APP_SCRIPT_URL, { method:"POST", headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({ action:"save_cloud", tck:b.tck, tecnico:b.tecnico, content:b.payload, pin:localStorage.getItem('tmc_auth_token') }) }); const out = await res.json(); if(out.success) { let ag = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').filter(x => x.tck !== tck); localStorage.setItem('tmc_bozze_locali', JSON.stringify(ag)); apriBozze(); alert("✅ Sincronizzato!"); } } catch(e) { alert("Errore."); } finally { document.getElementById('loading-overlay').style.display = 'none'; } }
