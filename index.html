@@ -2261,10 +2261,13 @@
             }
         }
 
-        // ── HEADER COMPLETO (ripetuto su OGNI pagina) ─────────────
-        function disegnaHeaderCompleto() {
+        // ── INTESTAZIONE LEGGERA (ripetuta su OGNI pagina) ────────
+        // Banner + titolo/badge + ID fatturazione + box cliente/tecnico.
+        // NON include le tabelle orari/ricambi: quelle vanno disegnate
+        // UNA SOLA VOLTA (vedi più sotto), altrimenti con molte righe
+        // il rapporto esplode a decine di pagine tutte ripetute.
+        function disegnaHeaderLeggero() {
             let y = 6;
-            // Banner vettoriale
             y = disegnaLogoImmagine(ML, y, CW);
             // Titolo + badge tipo
             doc.setDrawColor(...BLUE); doc.setLineWidth(0.6);
@@ -2305,85 +2308,6 @@
             lbl('MACCHINA / MATRICOLA', rx, y+25.5);
             val(d.macchina||'—', rx, y+29.7, 8, false);
             y += BOX_H + 3;
-
-            // Tabella orari (sempre ripetuta)
-            const orariBody = (d.orari.length ? d.orari : [{}]).map(o => [
-                o.data||'', o.tecnico||'',
-                o.va1||'', o.va2||'', o.lm1||'', o.lm2||'',
-                o.lp1||'', o.lp2||'', o.vr1||'', o.vr2||'',
-                '' // colonna P/C/H: contenuto vuoto, disegnata interamente in didDrawCell
-            ]);
-            const pchFlags = (d.orari.length ? d.orari : [{}]).map(o => ({ p: !!o.p, c: !!o.c, h: !!o.h }));
-            doc.autoTable({
-                startY: y,
-                head:[[
-                    {content:'DATA',rowSpan:2,styles:{halign:'center',valign:'middle'}},
-                    {content:'TECNICO',rowSpan:2,styles:{halign:'left',valign:'middle'}},
-                    {content:'VIAGGIO (A)',colSpan:2,styles:{halign:'center'}},
-                    {content:'LAVORO (M)',colSpan:2,styles:{halign:'center'}},
-                    {content:'LAVORO (P)',colSpan:2,styles:{halign:'center'}},
-                    {content:'VIAGGIO (R)',colSpan:2,styles:{halign:'center'}},
-                    {content:'P/C/H',rowSpan:2,styles:{halign:'center',valign:'middle'}}
-                ],['DA','A','DA','A','DA','A','DA','A']],
-                body: orariBody,
-                theme:'grid',
-                styles:{fontSize:7,cellPadding:1.3,lineColor:BLUE,lineWidth:0.2,textColor:BLACK,halign:'center',font:'helvetica',valign:'middle'},
-                headStyles:{fillColor:LBLUE,textColor:BLUE,fontStyle:'bold',fontSize:6.5,halign:'center'},
-                columnStyles:{0:{cellWidth:18},1:{cellWidth:36,halign:'left'},10:{cellWidth:17}},
-                margin:{left:ML,right:MR},
-                pageBreak:'avoid',
-                tableWidth: CW,
-                didDrawCell: function(data) {
-                    // Disegna le 3 mini-checkbox P/C/H solo nelle righe di corpo, colonna indice 10
-                    if (data.section === 'body' && data.column.index === 10) {
-                        const riga = pchFlags[data.row.index] || { p:false, c:false, h:false };
-                        const cellX = data.cell.x, cellY = data.cell.y;
-                        const cellW = data.cell.width, cellH = data.cell.height;
-                        const box = 2.0;             // lato del quadratino in mm
-                        const gap = 1.0;
-                        const labels = [['P', riga.p], ['C', riga.c], ['H', riga.h]];
-                        const totW = labels.length * box + (labels.length - 1) * gap;
-                        let cx = cellX + (cellW - totW) / 2;
-                        const cy = cellY + (cellH - box) / 2;
-                        labels.forEach(([lettera, flag]) => {
-                            doc.setDrawColor(...BLUE); doc.setLineWidth(0.2);
-                            if (flag) {
-                                doc.setFillColor(...BLUE);
-                                doc.rect(cx, cy, box, box, 'FD'); // riempito + bordo = flaggato
-                                doc.setTextColor(255,255,255);
-                            } else {
-                                doc.setFillColor(255,255,255);
-                                doc.rect(cx, cy, box, box, 'FD'); // vuoto + bordo = non flaggato
-                                doc.setTextColor(...GRAY);
-                            }
-                            doc.setFont('helvetica','bold');
-                            doc.setFontSize(3.6);
-                            doc.text(lettera, cx + box/2, cy + box*0.78, { align:'center' });
-                            cx += box + gap;
-                        });
-                    }
-                }
-            });
-            y = doc.lastAutoTable.finalY + 3;
-
-            // Tabella ricambi (se presente, ripetuta su ogni pagina insieme all'header)
-            if (d.ricambi.length > 0) {
-                doc.autoTable({
-                    startY: y,
-                    head:[['CODICE','DESCRIZIONE','Q.TÀ','UNIT. €','TOT. €']],
-                    body: d.ricambi.map(r=>[r.codice,r.descrizione,r.qta,r.unit,r.tot]),
-                    foot: d.totaleMat ? [[{content:'TOTALE:',colSpan:4,styles:{halign:'right',fontStyle:'bold'}},d.totaleMat]] : [],
-                    theme:'grid',
-                    styles:{fontSize:7.5,cellPadding:1.3,lineColor:BLUE,lineWidth:0.2,textColor:BLACK,valign:'middle'},
-                    headStyles:{fillColor:LBLUE,textColor:BLUE,fontStyle:'bold',fontSize:7},
-                    footStyles:{fillColor:[248,251,255],textColor:BLUE,fontStyle:'bold'},
-                    columnStyles:{0:{cellWidth:20},1:{halign:'left'},2:{cellWidth:14,halign:'center'},3:{cellWidth:20,halign:'right'},4:{cellWidth:20,halign:'right'}},
-                    margin:{left:ML,right:MR},
-                    pageBreak:'avoid',
-                    tableWidth: CW
-                });
-                y = doc.lastAutoTable.finalY + 3;
-            }
             return y;
         }
 
@@ -2397,11 +2321,106 @@
         function nuovaPagina() {
             if (pageNum > 0) doc.addPage();
             pageNum++;
-            return disegnaHeaderCompleto();
+            return disegnaHeaderLeggero();
         }
 
-        // ── PRIMA PAGINA ──────────────────────────────────────────
+        // ── PRIMA PAGINA: header leggero ────────────────────────────
         let y = nuovaPagina();
+
+        // ── TABELLA ORARI — disegnata UNA SOLA VOLTA ────────────────
+        // Se la tabella stessa è troppo lunga per una pagina, autoTable
+        // aggiunge pagine autonomamente: didDrawPage ridisegna solo
+        // l'header leggero su quelle pagine (mai le tabelle stesse,
+        // che autoTable continua da sola con l'intestazione di colonna).
+        const orariBody = (d.orari.length ? d.orari : [{}]).map(o => [
+            o.data||'', o.tecnico||'',
+            o.va1||'', o.va2||'', o.lm1||'', o.lm2||'',
+            o.lp1||'', o.lp2||'', o.vr1||'', o.vr2||'',
+            '' // colonna P/C/H: contenuto vuoto, disegnata interamente in didDrawCell
+        ]);
+        const pchFlags = (d.orari.length ? d.orari : [{}]).map(o => ({ p: !!o.p, c: !!o.c, h: !!o.h }));
+        doc.autoTable({
+            startY: y,
+            head:[[
+                {content:'DATA',rowSpan:2,styles:{halign:'center',valign:'middle'}},
+                {content:'TECNICO',rowSpan:2,styles:{halign:'left',valign:'middle'}},
+                {content:'VIAGGIO (A)',colSpan:2,styles:{halign:'center'}},
+                {content:'LAVORO (M)',colSpan:2,styles:{halign:'center'}},
+                {content:'LAVORO (P)',colSpan:2,styles:{halign:'center'}},
+                {content:'VIAGGIO (R)',colSpan:2,styles:{halign:'center'}},
+                {content:'P/C/H',rowSpan:2,styles:{halign:'center',valign:'middle'}}
+            ],['DA','A','DA','A','DA','A','DA','A']],
+            body: orariBody,
+            theme:'grid',
+            styles:{fontSize:7,cellPadding:1.3,lineColor:BLUE,lineWidth:0.2,textColor:BLACK,halign:'center',font:'helvetica',valign:'middle'},
+            headStyles:{fillColor:LBLUE,textColor:BLUE,fontStyle:'bold',fontSize:6.5,halign:'center'},
+            columnStyles:{0:{cellWidth:18},1:{cellWidth:36,halign:'left'},10:{cellWidth:17}},
+            margin:{left:ML,right:MR,top:6},
+            tableWidth: CW,
+            didDrawPage: function(dataHook) {
+                // Fires solo se la tabella STESSA non entra in una pagina e ne serve una nuova:
+                // in tal caso ridisegniamo SOLO l'header leggero (mai le tabelle da capo).
+                if (dataHook.pageNumber > 1 && dataHook.pageNumber > pageNum) {
+                    pageNum = dataHook.pageNumber;
+                    disegnaHeaderLeggero();
+                }
+            },
+            didDrawCell: function(data) {
+                // Disegna le 3 mini-checkbox P/C/H solo nelle righe di corpo, colonna indice 10
+                if (data.section === 'body' && data.column.index === 10) {
+                    const riga = pchFlags[data.row.index] || { p:false, c:false, h:false };
+                    const cellX = data.cell.x, cellY = data.cell.y;
+                    const cellW = data.cell.width, cellH = data.cell.height;
+                    const box = 2.0;             // lato del quadratino in mm
+                    const gap = 1.0;
+                    const labels = [['P', riga.p], ['C', riga.c], ['H', riga.h]];
+                    const totW = labels.length * box + (labels.length - 1) * gap;
+                    let cx = cellX + (cellW - totW) / 2;
+                    const cy = cellY + (cellH - box) / 2;
+                    labels.forEach(([lettera, flag]) => {
+                        doc.setDrawColor(...BLUE); doc.setLineWidth(0.2);
+                        if (flag) {
+                            doc.setFillColor(...BLUE);
+                            doc.rect(cx, cy, box, box, 'FD'); // riempito + bordo = flaggato
+                            doc.setTextColor(255,255,255);
+                        } else {
+                            doc.setFillColor(255,255,255);
+                            doc.rect(cx, cy, box, box, 'FD'); // vuoto + bordo = non flaggato
+                            doc.setTextColor(...GRAY);
+                        }
+                        doc.setFont('helvetica','bold');
+                        doc.setFontSize(3.6);
+                        doc.text(lettera, cx + box/2, cy + box*0.78, { align:'center' });
+                        cx += box + gap;
+                    });
+                }
+            }
+        });
+        y = doc.lastAutoTable.finalY + 3;
+
+        // ── TABELLA RICAMBI — disegnata UNA SOLA VOLTA ──────────────
+        if (d.ricambi.length > 0) {
+            doc.autoTable({
+                startY: y,
+                head:[['CODICE','DESCRIZIONE','Q.TÀ','UNIT. €','TOT. €']],
+                body: d.ricambi.map(r=>[r.codice,r.descrizione,r.qta,r.unit,r.tot]),
+                foot: d.totaleMat ? [[{content:'TOTALE:',colSpan:4,styles:{halign:'right',fontStyle:'bold'}},d.totaleMat]] : [],
+                theme:'grid',
+                styles:{fontSize:7.5,cellPadding:1.3,lineColor:BLUE,lineWidth:0.2,textColor:BLACK,valign:'middle'},
+                headStyles:{fillColor:LBLUE,textColor:BLUE,fontStyle:'bold',fontSize:7},
+                footStyles:{fillColor:[248,251,255],textColor:BLUE,fontStyle:'bold'},
+                columnStyles:{0:{cellWidth:20},1:{halign:'left'},2:{cellWidth:14,halign:'center'},3:{cellWidth:20,halign:'right'},4:{cellWidth:20,halign:'right'}},
+                margin:{left:ML,right:MR,top:6},
+                tableWidth: CW,
+                didDrawPage: function(dataHook) {
+                    if (dataHook.pageNumber > 1 && dataHook.pageNumber > pageNum) {
+                        pageNum = dataHook.pageNumber;
+                        disegnaHeaderLeggero();
+                    }
+                }
+            });
+            y = doc.lastAutoTable.finalY + 3;
+        }
 
         // Etichetta descrizione
         function intestaDescrizione(yy, continua) {
@@ -2412,9 +2431,13 @@
             return yy + 8;
         }
 
+        // Se non c'è più spazio per almeno l'etichetta + una riga di testo, vai a pagina nuova
+        if (y > BOTTOM_Y - 20) { y = nuovaPagina(); }
         y = intestaDescrizione(y, false);
 
         // ── DESCRIZIONE multi-pagina ──────────────────────────────
+        // Da qui in poi, ogni pagina nuova ha SOLO l'header leggero
+        // (banner + titolo + box cliente), MAI le tabelle orari/ricambi.
         const descrFontSize = 9, descrLineH = 4.5;
         doc.setFont('helvetica','normal'); doc.setFontSize(descrFontSize); doc.setTextColor(...BLACK);
         const descrLines = doc.splitTextToSize(_san(d.descr || '—'), CW-6);
@@ -2458,7 +2481,7 @@
             // entrambi all'inizio della pagina successiva.
             if (idxSeparatore >= li && idxSeparatore <= li + nRighe - 1) {
                 const posizioneNellaFetta = idxSeparatore - li;
-                const righeDopoSeparatoreNellaFetta = nRighe - posizioneNellaFetta; // ----, LAVORO ESEGUITO:, eventuale riga vuota
+                const righeDopoSeparatoreNellaFetta = nRighe - posizioneNellaFetta;
                 if (righeDopoSeparatoreNellaFetta < 3 && posizioneNellaFetta > 0) {
                     nRighe = posizioneNellaFetta; // taglia prima del separatore
                 }
@@ -2480,7 +2503,7 @@
         }
 
         // ── FIRMA + RIEPILOGO (sull'ultima pagina) ────────────────
-        // Se non c'è spazio, vai a pagina nuova (con header completo ripetuto)
+        // Se non c'è spazio, vai a pagina nuova (con header leggero, non tabelle)
         if (y + RIE_H > BOTTOM_Y) {
             y = nuovaPagina();
         }
