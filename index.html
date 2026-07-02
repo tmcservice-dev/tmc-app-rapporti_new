@@ -222,6 +222,8 @@
         .btn-invio { flex: 1; min-width: 140px; padding: 20px 10px; border: none; border-radius: 9px; font-weight: bold; cursor: pointer; color: white; font-size: 15px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.28); letter-spacing: 0.3px; }
         .btn-invio-whatsapp { background: #25D366; }
         .btn-invio-email { background: #e91e63; }
+        .btn-invio-giorno { background: var(--tmc-blue); }
+        .btn-invio-ricambio { background: #6a1b9a; }
         .btn-blue { background: var(--tmc-blue); } .btn-green { background: #25D366; } .btn-orange { background: #ff9800; } .btn-dark { background: #444; }
         .btn-sync { position: absolute; right: 10px; top: 10px; font-size: 20px; background: none; border: none; cursor: pointer; z-index: 10; }
         @media print { body { background: white; } .page-a4 { margin: 0; border: none; box-shadow: none; width: 210mm; height: auto; min-height: 297mm; padding: 2mm 8mm; } .no-print, .btn-sync, .mode-toggle-bar { display: none !important; } .card, tr, .bottom-grid, .main-title-container { page-break-inside: avoid; break-inside: avoid; } }
@@ -352,6 +354,12 @@
         <div class="mode-toggle-bar no-print">
             <button id="btn-mode-wiz" class="active" onclick="setMode('wizard')">🧭 Modalità Guidata</button>
             <button id="btn-mode-a4"  onclick="setMode('a4')">📄 Modulo A4</button>
+        </div>
+
+        <!-- ── AGGIUNTA RAPIDA: giorno/tecnico e ricambio (stesse dimensioni dei pulsanti di invio) ── -->
+        <div class="no-print" style="max-width:210mm; margin:0 auto; padding:0 15px 15px; display:flex; gap:10px;">
+            <button class="btn-invio btn-invio-giorno" onclick="addRow()">📅 + GIORNO/TECNICO</button>
+            <button class="btn-invio btn-invio-ricambio" onclick="addRicambio()">🔧 + RICAMBIO</button>
         </div>
 
         <!-- ══════════════════════════════════════════
@@ -760,11 +768,6 @@
                     <button class="btn btn-dark" style="background:#795548;" onclick="document.getElementById('import-json-input').click()">📥 IMPORTA JSON</button>
                 </div>
                 <input type="file" id="import-json-input" accept="application/json,.json" style="display:none;" onchange="importaDatiJSON(this.files[0])">
-
-                <div style="display:flex; gap:8px; width:100%; margin-top:8px;">
-                    <button class="btn btn-dark" onclick="addRow()">+ GIORNO/TECNICO</button>
-                    <button class="btn btn-dark" onclick="addRicambio()">+ RICAMBIO</button>
-                </div>
 
                 <div style="display:flex; gap:8px; width:100%; margin-top:8px;">
                     <button class="btn" style="background:red;" onclick="nuovoRapporto()">RESET NUOVO</button>
