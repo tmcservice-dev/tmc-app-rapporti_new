@@ -2021,9 +2021,38 @@
             alert("Errore connessione: " + e.message);
         }
     }
-    function mostraSelezioneTicket(results) { const container = document.getElementById('lista-ticket-trovati'); container.innerHTML = ""; results.forEach(res => { const btn = document.createElement('button'); btn.className='ticket-btn'; btn.innerHTML=`<b>${res.tck||'Senza TCK'}</b> - ${res.cliente||'Senza Cliente'}<br><span style="font-size:10px; color:#666;">${res.problema||''}</span>`; btn.onclick=() => { document.getElementById('select-ticket-overlay').style.display='none'; applicaDatiCalendario(res); }; container.appendChild(btn); }); document.getElementById('select-ticket-overlay').style.display='flex'; }
+    function mostraSelezioneTicket(results) {
+        const container = document.getElementById('lista-ticket-trovati');
+        container.innerHTML = "";
+        results.forEach(res => {
+            const btn = document.createElement('button');
+            btn.className = 'ticket-btn';
+            const giaInviati = res.rapportiGiaInviati || 0;
+            const badge = giaInviati > 0
+                ? `<span style="background:#fff3e0; color:#e65100; font-size:9px; font-weight:bold; padding:2px 6px; border-radius:8px; margin-left:6px;">${giaInviati} già inviato/i</span>`
+                : '';
+            btn.innerHTML = `<b>${res.tck||'Senza TCK'}</b>${badge} - ${res.cliente||'Senza Cliente'}<br><span style="font-size:10px; color:#666;">${res.problema||''}</span>`;
+            btn.onclick = () => { document.getElementById('select-ticket-overlay').style.display='none'; applicaDatiCalendario(res); };
+            container.appendChild(btn);
+        });
+        document.getElementById('select-ticket-overlay').style.display='flex';
+    }
+    // Calcola il numero ticket da usare: il backend (Code.gs) ora restituisce
+    // direttamente "rapportiGiaInviati" — il conteggio di quante volte compare
+    // "RAPPORTO INVIATO" nel testo COMPLETO della descrizione calendario.
+    // (Non si può ricavare da data.problema: quel campo viene troncato dal
+    // backend prima del blocco RAPPORTO INVIATO, che è sempre in fondo).
+    // Se per questo evento risultano già N rapportini inviati, aggiunge il
+    // suffisso "/N" per tenerli distinti (TCK-10154 → TCK-10154/1 → /2...).
+    function _ticketConSuffisso(data) {
+        const base = data.tck || "";
+        const giaInviati = data.rapportiGiaInviati || 0;
+        return giaInviati > 0 ? `${base}/${giaInviati}` : base;
+    }
+
     function applicaDatiCalendario(data) {
-        document.getElementById('n_rapporto_input').value  = data.tck || "";
+        const tckConSuffisso = _ticketConSuffisso(data);
+        document.getElementById('n_rapporto_input').value  = tckConSuffisso;
         document.getElementById('macchina_input').value    = (data.matricola || "").toUpperCase();
         document.getElementById('cliente_input').value     = (data.cliente   || "").toUpperCase();
         document.getElementById('indirizzo_input').value   = (data.indirizzo || "").toUpperCase();
@@ -2049,7 +2078,7 @@
             }
         }
         // Sincronizza campi wizard base
-        if(document.getElementById('w_ticket'))   document.getElementById('w_ticket').value   = data.tck || "";
+        if(document.getElementById('w_ticket'))   document.getElementById('w_ticket').value   = tckConSuffisso;
         if(document.getElementById('w_cliente'))   document.getElementById('w_cliente').value   = (data.cliente||"").toUpperCase();
         if(document.getElementById('w_indirizzo')) document.getElementById('w_indirizzo').value = (data.indirizzo||"").toUpperCase();
         if(document.getElementById('w_matricola')) document.getElementById('w_matricola').value = (data.matricola||"").toUpperCase();
@@ -2508,7 +2537,9 @@
 
     async function generaPdfPacchetto(filenamePrefix) {
         const doc = await generaPdfRapporto();
-        const idU = document.getElementById('id_univoco_input').value || 'NUOVO';
+        // Sostituisce "/" con "-" nell'ID: il numero ticket può contenere un suffisso
+        // tipo "TCK-10154/1" per interventi ripetuti, ma "/" spezzerebbe il nome file.
+        const idU = (document.getElementById('id_univoco_input').value || 'NUOVO').replace(/[\/\\]/g, '-');
         const cli = (document.getElementById('cliente_input').value || 'Cliente').replace(/[^A-Za-z0-9_-]/g, '_');
         const filename = `${filenamePrefix || 'Rapporto'}_${idU}_${cli}.pdf`;
         const blob = doc.output('blob');
@@ -2688,7 +2719,34 @@
             mostraEsitoEmail(false, msg, null);
         }
     }
-    function generaRiepilogoCalendario(idUnivoco) { let r=`\n\n--- RAPPORTO INVIATO (${idUnivoco}) ---\n`; let lav=document.getElementById('tot_lavoro_span')?.innerText||""; if(lav) r+=`Ore: ${lav}\n`; let totP=0,totC=0,totH=0; for(let i=1;i<=rowCount;i++){ if(document.getElementsByName(`p_${i}`)[0]?.checked)totP++; if(document.getElementsByName(`c_${i}`)[0]?.checked)totC++; if(document.getElementsByName(`h_${i}`)[0]?.checked)totH++; } if(totP+totC>0)r+=`Pasti: ${totP+totC}\n`; if(totH>0)r+=`Hotel: ${totH}\n`; let ric=[]; for(let i=1;i<=ricCount;i++){let d=document.getElementsByName(`rd_${i}`)[0]?.value; let q=document.getElementsByName(`rq_${i}`)[0]?.value; if(d&&q&&parseFloat(q)>0)ric.push(`- ${q}x ${d.toUpperCase()}`);} if(ric.length>0)r+=`Ricambi:\n${ric.join('\n')}\n`; return r; }
+    function generaRiepilogoCalendario(idUnivoco) {
+        let r=`\n\n--- RAPPORTO INVIATO (${idUnivoco}) ---\n`;
+        // Nome/i tecnico/i coinvolto/i nell'intervento
+        const tecnici = [];
+        document.querySelectorAll('[name^="tecnico_"]').forEach(el => {
+            const v = (el.value||'').trim();
+            if (v) tecnici.push(v.toUpperCase());
+        });
+        if (tecnici.length > 0) r += `Tecnico/i: ${tecnici.join(', ')}\n`;
+        let lav=document.getElementById('tot_lavoro_span')?.innerText||"";
+        if(lav) r+=`Ore: ${lav}\n`;
+        let totP=0,totC=0,totH=0;
+        for(let i=1;i<=rowCount;i++){
+            if(document.getElementsByName(`p_${i}`)[0]?.checked)totP++;
+            if(document.getElementsByName(`c_${i}`)[0]?.checked)totC++;
+            if(document.getElementsByName(`h_${i}`)[0]?.checked)totH++;
+        }
+        if(totP+totC>0)r+=`Pasti: ${totP+totC}\n`;
+        if(totH>0)r+=`Hotel: ${totH}\n`;
+        let ric=[];
+        for(let i=1;i<=ricCount;i++){
+            let d=document.getElementsByName(`rd_${i}`)[0]?.value;
+            let q=document.getElementsByName(`rq_${i}`)[0]?.value;
+            if(d&&q&&parseFloat(q)>0)ric.push(`- ${q}x ${d.toUpperCase()}`);
+        }
+        if(ric.length>0)r+=`Ricambi:\n${ric.join('\n')}\n`;
+        return r;
+    }
     function setTipo(val) { document.getElementById('tipo_int_hidden').value=val; document.getElementById('box-G').className='tipo-box'+(val==='G'?' active':''); document.getElementById('box-P').className='tipo-box'+(val==='P'?' active':''); saveDraft(); }
     function addRow() { rowCount++; const tr=document.createElement('tr'); tr.innerHTML=`<td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data" name="d_${rowCount}" placeholder="Data" readonly style="font-size:9px; text-align:center; width:100%; pointer-events:none; border:none; background:transparent;"></td><td><input type="text" class="save-data caps" name="tec_${rowCount}" placeholder="Nome" style="font-size:8px; text-align:center; width:100%;"><div id="ore_riga_${rowCount}" style="font-size:7px; color:var(--tmc-blue); font-weight:bold; margin-top:2px;"></div></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="va1_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="va2_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="lm1_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="lm2_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="lp1_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="lp2_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="vr1_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="vr2_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><div class="pch-row-a4" style="pointer-events:none;">P<input type="checkbox" class="save-data" name="p_${rowCount}">C<input type="checkbox" class="save-data" name="c_${rowCount}">H<input type="checkbox" class="save-data" name="h_${rowCount}"></div></td><td class="no-print"><button type="button" onclick="eliminaRigaOre(this)" style="background:#ff4444; color:white; border:none; border-radius:3px; padding:3px 6px; font-weight:bold; cursor:pointer;">X</button></td>`; document.getElementById('table-body').appendChild(tr); attachListeners(); }
     function eliminaRigaOre(btn) { if(!confirm("Eliminare questa riga?"))return; btn.closest('tr').remove(); rinumeraRigheOre(); calc(); }
