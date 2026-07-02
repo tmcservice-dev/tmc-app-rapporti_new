@@ -2094,7 +2094,10 @@
     function _caricaImmagine(url) {
         return new Promise(resolve => {
             const img = new Image();
-            img.crossOrigin = 'anonymous';
+            // Nota: NON impostiamo crossOrigin='anonymous' — le immagini sono sullo
+            // stesso dominio (static/...), quindi l'attributo è inutile e su alcuni
+            // browser (es. Firefox Android) può causare un fallimento del caricamento
+            // che prima lasciava l'intestazione del PDF completamente sballata.
             img.onload = () => {
                 // Usa le dimensioni native dell'immagine senza ridimensionarla:
                 // ridurre la risoluzione qui è la causa principale di un logo sgranato nel PDF.
@@ -2200,8 +2203,17 @@
 
         // ── LOGO TMC: immagine reale intestazione.jpg (alta qualità) ──
         function disegnaLogoImmagine(x, y, w) {
-            if (!_pdfBannerData) return y; // fallback: nessun avanzamento se manca l'immagine
-            doc.addImage(_pdfBannerData.data, 'JPEG', x, y, w, bannerH, undefined, 'SLOW');
+            if (_pdfBannerData) {
+                doc.addImage(_pdfBannerData.data, 'JPEG', x, y, w, bannerH, undefined, 'SLOW');
+            } else {
+                // Fallback: l'immagine non si è caricata (rete lenta, browser, ecc.).
+                // Disegniamo un placeholder testuale MA riserviamo comunque lo stesso
+                // spazio verticale (bannerH), così il resto del documento non si sfasa.
+                doc.setDrawColor(...BLUE); doc.setLineWidth(0.3);
+                doc.rect(x, y, w, bannerH, 'S');
+                doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.setTextColor(...BLUE);
+                doc.text('TMC SERVICE', x + w/2, y + bannerH/2 + 2, { align:'center' });
+            }
             let yy = y + bannerH + 1;
             // Barra diagonale decorativa sotto al banner, coerente con lo stile originale
             const barY = yy + 1.5;
