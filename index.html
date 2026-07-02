@@ -2705,6 +2705,11 @@
         if (!tckVal.startsWith("TCK-")) tckVal = "TCK-" + tckVal;
         let inviati = JSON.parse(localStorage.getItem('tmc_ticket_inviati') || '[]');
         if (inviati.includes(tckVal) && !confirm("⚠️ Già chiuso. Vuoi aggiornare?")) return;
+
+        // Backup automatico e silenzioso: salva sempre un JSON sul dispositivo
+        // prima di procedere con l'invio, senza chiedere conferma.
+        esportaDatiJSON();
+
         let testoCal = document.getElementById('descrizione_input').value;
         if (testoCal.indexOf("RAPPORTO INVIATO") === -1) testoCal += generaRiepilogoCalendario(idU);
 
@@ -2775,6 +2780,11 @@
         if (!tckVal.startsWith("TCK-")) tckVal = "TCK-" + tckVal;
         let inviati = JSON.parse(localStorage.getItem('tmc_ticket_inviati') || '[]');
         if (inviati.includes(tckVal) && !confirm("⚠️ Già inviato. Ri-inviare?")) return;
+
+        // Backup automatico e silenzioso: salva sempre un JSON sul dispositivo
+        // prima di procedere con l'invio, senza chiedere conferma.
+        esportaDatiJSON();
+
         let testoCal = document.getElementById('descrizione_input').value;
         if (testoCal.indexOf("RAPPORTO INVIATO") === -1) testoCal += generaRiepilogoCalendario(idU);
         const emailCliente = document.getElementById('email_input').value || '';
