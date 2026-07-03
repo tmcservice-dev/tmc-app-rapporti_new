@@ -13,7 +13,8 @@
         /* ── TOGGLE MODALITÀ ── */
         .mode-toggle-bar {
             display: flex; align-items: center; justify-content: center;
-            gap: 0; max-width: 210mm; margin: 12px auto; padding: 0 10px;
+            gap: 0; max-width: 480px; margin: 12px auto; padding: 0 10px;
+            box-sizing: border-box;
         }
         .mode-toggle-bar button {
             flex: 1; padding: 10px 8px; border: 1.5px solid var(--tmc-blue);
@@ -58,6 +59,13 @@
             border-radius: 5px; font-size: 13px; font-weight: bold;
             background: #f0f7ff; color: var(--tmc-blue); cursor: pointer; margin-top: 4px;
         }
+        /* Lampeggio guidato: attira l'attenzione su "Importa dal calendario"
+           finché non si importa un ticket, poi passa al pulsante "Avanti" */
+        @keyframes lampeggio {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255,152,0,0.65); }
+            50%      { box-shadow: 0 0 0 9px rgba(255,152,0,0); }
+        }
+        .lampeggia { animation: lampeggio 1.3s ease-in-out infinite; }
         .tec-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; margin-top: 4px; }
         .tec-btn {
             padding: 11px 6px; border: 1px solid #cce0f5; border-radius: 5px;
@@ -357,7 +365,7 @@
         </div>
 
         <!-- ── AGGIUNTA RAPIDA: giorno/tecnico e ricambio (stesse dimensioni dei pulsanti di invio) ── -->
-        <div class="no-print" style="max-width:210mm; margin:0 auto; padding:0 15px 15px; display:flex; gap:10px;">
+        <div class="no-print" id="quick-add-bar" style="max-width:480px; box-sizing:border-box; margin:0 auto; padding:0 15px 15px; display:flex; gap:10px;">
             <button class="btn-invio btn-invio-giorno" onclick="addRow()">📅 + GIORNO/TECNICO</button>
             <button class="btn-invio btn-invio-ricambio" onclick="addRicambio()">🔧 + RICAMBIO</button>
         </div>
@@ -890,6 +898,15 @@
         document.getElementById('a4-view').style.display     = isWiz ? 'none'  : 'block';
         document.getElementById('btn-mode-wiz').className    = isWiz ? 'active' : '';
         document.getElementById('btn-mode-a4').className     = isWiz ? '' : 'active';
+        // Le barre in cima (toggle + aggiunta rapida) sono condivise da entrambe
+        // le viste: adeguano la larghezza a quella attiva così restano allineate
+        // al contenuto sottostante (480px nel wizard, 210mm nel modulo A4)
+        // invece di lasciare sfondo grigio ai lati su tablet/desktop.
+        const largh = isWiz ? '480px' : '210mm';
+        const toggleBar = document.querySelector('.mode-toggle-bar');
+        const quickAddBar = document.getElementById('quick-add-bar');
+        if (toggleBar) toggleBar.style.maxWidth = largh;
+        if (quickAddBar) quickAddBar.style.maxWidth = largh;
         // Quando si passa al modulo A4, aggiorna tutti i totali
         if (!isWiz) calc();
         localStorage.setItem('tmc_mode', mode);
@@ -899,6 +916,27 @@
     // WIZARD — stato
     // ═══════════════════════════════════════════════
     let wizCur = 1;
+    // Traccia se un ticket è già stato importato dal calendario nello step 1,
+    // per gestire il lampeggio guidato: prima "Importa", poi "Avanti".
+    let wizTicketImportato = false;
+
+    function wizAggiornaLampeggio() {
+        const btnImporta = document.querySelector('.wiz-sync-btn');
+        const btnAvanti  = document.getElementById('wiz-btn-next');
+        if (wizCur !== 1) {
+            // Fuori dallo step 1 nessun lampeggio guidato
+            if (btnImporta) btnImporta.classList.remove('lampeggia');
+            if (btnAvanti)  btnAvanti.classList.remove('lampeggia');
+            return;
+        }
+        if (!wizTicketImportato) {
+            if (btnImporta) btnImporta.classList.add('lampeggia');
+            if (btnAvanti)  btnAvanti.classList.remove('lampeggia');
+        } else {
+            if (btnImporta) btnImporta.classList.remove('lampeggia');
+            if (btnAvanti)  btnAvanti.classList.add('lampeggia');
+        }
+    }
     // wizSteps: sequenza step attivi. '4b'=materiali e '4c'=anteprima A4 sono condizionali, '4r' fisso
     let wizSteps = [1, 2, 3, 4, '4r', '4c', 5];
     const WIZ_NAMES_MAP = {
@@ -950,6 +988,7 @@
         if (step === 3)    wizRenderGiorno();
         if (step === '4r') wizRicRipristina();
         if (step === 5)    { wizPopolaRiepilogo(); wizCheckEmail(); }
+        wizAggiornaLampeggio();
         window.scrollTo(0, 0);
     }
 
@@ -2235,6 +2274,10 @@
 
         document.getElementById('id_univoco_input').value = "";
         generaIdUnivoco(); saveDraft();
+
+        // Ticket importato con successo: sposta il lampeggio guidato su "Avanti"
+        wizTicketImportato = true;
+        wizAggiornaLampeggio();
     }
     // ════════════════════════════════════════════════════════════
     // GENERAZIONE PDF CON jsPDF (deterministico, identico su ogni device)
@@ -3161,6 +3204,7 @@
         document.getElementById('pin_input').addEventListener("keypress", function(e){ if(e.key==="Enter"){ e.preventDefault(); verificaLogin(); } });
         document.getElementById('email_tecnico_input').addEventListener("keypress", function(e){ if(e.key==="Enter"){ e.preventDefault(); salvaEmailTecnico(); } });
         wizUpdateProgress();
+        wizAggiornaLampeggio();
     };
     </script>
 </body>
