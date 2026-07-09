@@ -4,6 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" id="viewport-meta">
     <title>TMC Service - App Rapporti A4</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0054a6">
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TMC Service">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <style>
@@ -784,6 +791,21 @@
 
                 <button class="btn btn-dark" style="width:100%; margin-top:10px;" onclick="esciApp()">🔒 ESCI E RIMUOVI AUTORIZZAZIONE</button>
             </div>
+        </div>
+    </div>
+
+    <!-- OVERLAY ANTEPRIMA PDF (prima dell'invio email) -->
+    <div id="pdf-preview-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:99996; flex-direction:column;">
+        <div style="padding:12px 16px; background:var(--tmc-blue); color:white; display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
+            <b style="font-size:15px;">📄 Anteprima Rapporto</b>
+            <button onclick="pdfPreviewAnnulla()" style="background:white; color:var(--tmc-blue); border:none; padding:8px 14px; border-radius:5px; font-weight:bold; cursor:pointer;">✕ Chiudi</button>
+        </div>
+        <div style="flex:1; overflow:hidden; position:relative; background:#525659;">
+            <iframe id="pdf-preview-frame" style="width:100%; height:100%; border:none;"></iframe>
+        </div>
+        <div style="padding:14px 16px; background:white; display:flex; gap:10px; flex-shrink:0;">
+            <button onclick="pdfPreviewAnnulla()" style="flex:1; padding:15px; background:#eee; color:#333; border:none; border-radius:6px; font-weight:bold; font-size:14px; cursor:pointer;">Annulla</button>
+            <button onclick="pdfPreviewConferma()" style="flex:2; padding:15px; background:#25D366; color:white; border:none; border-radius:6px; font-weight:bold; font-size:14px; cursor:pointer;">✅ Va bene, invia</button>
         </div>
     </div>
 
@@ -2608,7 +2630,8 @@
         }
 
         // Se non c'è più spazio per almeno l'etichetta + una riga di testo, vai a pagina nuova
-        if (y > BOTTOM_Y - 20) { y = nuovaPagina(); }
+        // (margine di sicurezza aumentato da 20 a 28mm per evitare casi limite)
+        if (y > BOTTOM_Y - 28) { y = nuovaPagina(); }
         y = intestaDescrizione(y, false);
 
         // ── DESCRIZIONE multi-pagina ──────────────────────────────
@@ -2864,6 +2887,34 @@
         });
     }
 
+    // ═══════════════════════════════════════════════
+    // ANTEPRIMA PDF PRIMA DELL'INVIO EMAIL
+    // ═══════════════════════════════════════════════
+    let _pdfPreviewResolveFn = null;
+    let _pdfPreviewBlobUrl = null;
+
+    // Mostra il PDF già generato in un iframe a schermo intero e attende
+    // che l'utente confermi o annulli. Ritorna true/false.
+    function mostraAnteprimaPdf(blob) {
+        if (_pdfPreviewBlobUrl) { URL.revokeObjectURL(_pdfPreviewBlobUrl); _pdfPreviewBlobUrl = null; }
+        _pdfPreviewBlobUrl = URL.createObjectURL(blob);
+        document.getElementById('pdf-preview-frame').src = _pdfPreviewBlobUrl;
+        document.getElementById('pdf-preview-overlay').style.display = 'flex';
+        return new Promise((resolve) => { _pdfPreviewResolveFn = resolve; });
+    }
+
+    function pdfPreviewConferma() {
+        document.getElementById('pdf-preview-overlay').style.display = 'none';
+        if (_pdfPreviewResolveFn) _pdfPreviewResolveFn(true);
+    }
+
+    function pdfPreviewAnnulla() {
+        document.getElementById('pdf-preview-overlay').style.display = 'none';
+        document.getElementById('pdf-preview-frame').src = '';
+        if (_pdfPreviewBlobUrl) { URL.revokeObjectURL(_pdfPreviewBlobUrl); _pdfPreviewBlobUrl = null; }
+        if (_pdfPreviewResolveFn) _pdfPreviewResolveFn(false);
+    }
+
     async function condividiWhatsApp() {
         if (!validaCampiObbligatori()) return;
         if (!navigator.onLine) { alert("📵 Offline! Connettiti per aggiornare il calendario."); return; }
@@ -2894,6 +2945,16 @@
         const fileList = [];
         try {
             pkg = await generaPdfPacchetto('Rapporto');
+
+            // Mostra il PDF appena generato e attende conferma prima di procedere.
+            // Se l'utente annulla dopo averlo visto, la condivisione si interrompe qui:
+            // nessun messaggio WhatsApp, nessun aggiornamento calendario.
+            document.getElementById('loading-overlay').style.display = 'none';
+            const confermato = await mostraAnteprimaPdf(pkg.blob);
+            if (!confermato) return;
+            document.getElementById('loading-overlay').style.display = 'flex';
+            document.getElementById('loading-text').innerText = "Generazione PDF...";
+
             fileList.push(new File([pkg.blob], pkg.filename, { type: 'application/pdf' }));
             // Comprimi e aggiungi le foto scelte, se presenti
             if (fotoScelte.length > 0) {
@@ -2982,6 +3043,14 @@
         document.getElementById('loading-text').innerText = "Generazione PDF...";
         try {
             const pkg = await generaPdfPacchetto('Rapporto');
+
+            // Mostra il PDF appena generato e attende conferma prima di procedere.
+            // Se l'utente annulla dopo averlo visto, l'invio si interrompe qui:
+            // nessuna email viene spedita, nessun calendario aggiornato.
+            document.getElementById('loading-overlay').style.display = 'none';
+            const confermato = await mostraAnteprimaPdf(pkg.blob);
+            if (!confermato) return;
+            document.getElementById('loading-overlay').style.display = 'flex';
 
             // Comprimi le foto scelte e convertile in base64 per l'invio al backend
             const fotoBase64 = [];
@@ -3189,6 +3258,15 @@
     // (Listener stampa rimossi: il PDF è ora generato direttamente da jsPDF, non più via window.print)
     // Init data wizard al giorno corrente
     // (w_data rimosso: ora le date sono gestite per giornata in wizGiornate)
+    // Registra il Service Worker per abilitare l'installazione come app (PWA)
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js').catch(() => {
+                // Fallisce silenziosamente: l'app funziona comunque da browser normale
+            });
+        });
+    }
+
     window.onload = function(){
         // Inizializza canvas firma (deve essere dentro onload per essere sicuro che il DOM esista)
         canvas = document.getElementById('canvas-fullscreen');
