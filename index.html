@@ -13,6 +13,7 @@
     <meta name="apple-mobile-web-app-title" content="TMC Service">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
         :root { --tmc-blue: #0054a6; --tmc-light-blue: #f0f7ff; --tmc-dark: #222; }
         body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 0; background: #525659; color: var(--tmc-dark); }
@@ -800,8 +801,8 @@
             <b style="font-size:15px;">📄 Anteprima Rapporto</b>
             <button onclick="pdfPreviewAnnulla()" style="background:white; color:var(--tmc-blue); border:none; padding:8px 14px; border-radius:5px; font-weight:bold; cursor:pointer;">✕ Chiudi</button>
         </div>
-        <div style="flex:1; overflow:hidden; position:relative; background:#525659;">
-            <iframe id="pdf-preview-frame" style="width:100%; height:100%; border:none;"></iframe>
+        <div style="flex:1; overflow-y:auto; background:#525659; padding:14px 0;">
+            <div id="pdf-preview-pages" style="display:flex; flex-direction:column; align-items:center; gap:14px;"></div>
         </div>
         <div style="padding:14px 16px; background:white; display:flex; gap:10px; flex-shrink:0;">
             <button onclick="pdfPreviewAnnulla()" style="flex:1; padding:15px; background:#eee; color:#333; border:none; border-radius:6px; font-weight:bold; font-size:14px; cursor:pointer;">Annulla</button>
@@ -906,6 +907,11 @@
         alert('⚠️ ERRORE TECNICO (rete/dati)\n\n' + msg +
               '\n\nFai uno screenshot e mandalo all\'ufficio.');
     });
+
+    // Worker PDF.js — necessario per il rendering delle pagine nell'anteprima
+    if (window.pdfjsLib) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
 
     const APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwflYcjnY-wzmJBmf8LlRh00vDx-L4ckMISLP27b6Upz7x6eK-1HJeb4EAywFI2R2RxlA/exec";
     const FRASE_SICUREZZA = "";
@@ -2888,18 +2894,51 @@
     }
 
     // ═══════════════════════════════════════════════
-    // ANTEPRIMA PDF PRIMA DELL'INVIO EMAIL
+    // ANTEPRIMA PDF PRIMA DELL'INVIO (email + WhatsApp)
     // ═══════════════════════════════════════════════
+    // NOTA: non usiamo <iframe src="blob:..."> perché su Android Chrome
+    // (e molti browser mobile) un blob PDF dentro un iframe spesso NON
+    // viene mostrato inline ma scaricato come file. Per avere lo stesso
+    // comportamento identico su Android/iPhone/desktop disegniamo ogni
+    // pagina del PDF come immagine (canvas) tramite PDF.js: è sempre e
+    // solo contenuto della pagina, non può mai scatenare un download.
     let _pdfPreviewResolveFn = null;
-    let _pdfPreviewBlobUrl = null;
 
-    // Mostra il PDF già generato in un iframe a schermo intero e attende
-    // che l'utente confermi o annulli. Ritorna true/false.
-    function mostraAnteprimaPdf(blob) {
-        if (_pdfPreviewBlobUrl) { URL.revokeObjectURL(_pdfPreviewBlobUrl); _pdfPreviewBlobUrl = null; }
-        _pdfPreviewBlobUrl = URL.createObjectURL(blob);
-        document.getElementById('pdf-preview-frame').src = _pdfPreviewBlobUrl;
-        document.getElementById('pdf-preview-overlay').style.display = 'flex';
+    // Mostra il PDF già generato pagina per pagina e attende che l'utente
+    // confermi o annulli. Ritorna true/false.
+    async function mostraAnteprimaPdf(blob) {
+        const overlay = document.getElementById('pdf-preview-overlay');
+        const container = document.getElementById('pdf-preview-pages');
+        overlay.style.display = 'flex';
+        container.innerHTML = '<div style="color:white; text-align:center; padding:50px 20px; font-size:14px;">⏳ Caricamento anteprima...</div>';
+
+        try {
+            const arrayBuffer = await blob.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            container.innerHTML = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                // Scala pensata per riempire bene la larghezza su telefono/tablet
+                const scale = Math.min(2.2, (window.innerWidth - 30) / page.getViewport({ scale: 1 }).width);
+                const viewport = page.getViewport({ scale: Math.max(scale, 1) });
+                const canvas = document.createElement('canvas');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                canvas.style.cssText = 'display:block; max-width:calc(100% - 20px); height:auto; box-shadow:0 3px 12px rgba(0,0,0,0.45); border-radius:2px;';
+                const ctx = canvas.getContext('2d');
+                await page.render({ canvasContext: ctx, viewport }).promise;
+                container.appendChild(canvas);
+            }
+            if (pdf.numPages > 1) {
+                const nota = document.createElement('div');
+                nota.style.cssText = 'color:#ccc; font-size:12px; text-align:center; padding-bottom:10px;';
+                nota.textContent = `${pdf.numPages} pagine totali`;
+                container.appendChild(nota);
+            }
+        } catch (e) {
+            container.innerHTML = `<div style="color:white; text-align:center; padding:40px 20px; font-size:14px;">⚠️ Impossibile generare l'anteprima.<br><span style="color:#ccc; font-size:12px;">${e.message}</span></div>`;
+        }
+
         return new Promise((resolve) => { _pdfPreviewResolveFn = resolve; });
     }
 
@@ -2910,8 +2949,7 @@
 
     function pdfPreviewAnnulla() {
         document.getElementById('pdf-preview-overlay').style.display = 'none';
-        document.getElementById('pdf-preview-frame').src = '';
-        if (_pdfPreviewBlobUrl) { URL.revokeObjectURL(_pdfPreviewBlobUrl); _pdfPreviewBlobUrl = null; }
+        document.getElementById('pdf-preview-pages').innerHTML = '';
         if (_pdfPreviewResolveFn) _pdfPreviewResolveFn(false);
     }
 
