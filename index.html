@@ -2978,23 +2978,18 @@
         document.getElementById('loading-overlay').style.display = 'flex';
         document.getElementById('loading-text').innerText = "Generazione PDF...";
 
-        // Genera il PDF (necessario l'await, ma lo facciamo prima dello share)
+        // IMPORTANTE: generiamo PDF e comprimiamo TUTTE le foto QUI, prima
+        // di mostrare l'anteprima — non dopo. Ogni operazione asincrona
+        // (attesa) tra l'ultimo tocco dell'utente e navigator.share() rischia
+        // di far scadere il permesso di condivisione su Android/iOS. Preparando
+        // tutto in anticipo, dopo il tocco "Va bene, invia" nell'anteprima
+        // non resta da fare nient'altro che chiamare share() immediatamente.
         let pkg;
         const fileList = [];
         try {
             pkg = await generaPdfPacchetto('Rapporto');
-
-            // Mostra il PDF appena generato e attende conferma prima di procedere.
-            // Se l'utente annulla dopo averlo visto, la condivisione si interrompe qui:
-            // nessun messaggio WhatsApp, nessun aggiornamento calendario.
-            document.getElementById('loading-overlay').style.display = 'none';
-            const confermato = await mostraAnteprimaPdf(pkg.blob);
-            if (!confermato) return;
-            document.getElementById('loading-overlay').style.display = 'flex';
-            document.getElementById('loading-text').innerText = "Generazione PDF...";
-
             fileList.push(new File([pkg.blob], pkg.filename, { type: 'application/pdf' }));
-            // Comprimi e aggiungi le foto scelte, se presenti
+
             if (fotoScelte.length > 0) {
                 document.getElementById('loading-text').innerText = "Elaborazione foto...";
                 for (let i = 0; i < fotoScelte.length; i++) {
@@ -3010,9 +3005,13 @@
             return;
         }
 
+        // Tutto pronto: ORA mostriamo l'anteprima e attendiamo il tocco di conferma.
         document.getElementById('loading-overlay').style.display = 'none';
+        const confermato = await mostraAnteprimaPdf(pkg.blob);
+        if (!confermato) return; // nessun invio, nessun aggiornamento calendario
 
-        // Aggiorna calendario in background — NON attendiamo (preserva il gesto utente)
+        // Da qui in poi TUTTO è sincrono o fire-and-forget: nessuna attesa
+        // tra il tocco di conferma e la chiamata a navigator.share().
         fetch(APP_SCRIPT_URL, {
             method: "POST",
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
