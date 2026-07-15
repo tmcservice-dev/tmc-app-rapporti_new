@@ -11,9 +11,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="TMC Service">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="lib/jspdf.umd.min.js"></script>
+    <script src="lib/jspdf.plugin.autotable.min.js"></script>
+    <script src="lib/pdf.min.js"></script>
     <style>
         :root { --tmc-blue: #0054a6; --tmc-light-blue: #f0f7ff; --tmc-dark: #222; }
         body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 0; background: #525659; color: var(--tmc-dark); }
@@ -908,9 +908,23 @@
               '\n\nFai uno screenshot e mandalo all\'ufficio.');
     });
 
+    // ── SALVATAGGIO SU STANDBY / CHIUSURA ──────────────────────
+    // 'visibilitychange' scatta quando l'app va in background (standby,
+    // cambio app, blocco schermo) — il momento più a rischio di perdita
+    // dati su mobile. 'pagehide' copre chiusura scheda/browser e
+    // navigazione via. Entrambi salvano subito lo stato del wizard.
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'hidden') {
+            try { autoSalvaStatoWizard(); } catch(_) {}
+        }
+    });
+    window.addEventListener('pagehide', function() {
+        try { autoSalvaStatoWizard(); } catch(_) {}
+    });
+
     // Worker PDF.js — necessario per il rendering delle pagine nell'anteprima
     if (window.pdfjsLib) {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'lib/pdf.worker.min.js';
     }
 
     const APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwflYcjnY-wzmJBmf8LlRh00vDx-L4ckMISLP27b6Upz7x6eK-1HJeb4EAywFI2R2RxlA/exec";
@@ -947,6 +961,46 @@
     // Traccia se un ticket è già stato importato dal calendario nello step 1,
     // per gestire il lampeggio guidato: prima "Importa", poi "Avanti".
     let wizTicketImportato = false;
+
+    // ═══════════════════════════════════════════════
+    // SALVATAGGIO AUTOMATICO STATO WIZARD (standby/chiusura browser)
+    // ═══════════════════════════════════════════════
+    // A differenza dei campi del modulo A4 (già salvati ad ogni digitazione
+    // tramite saveDraft()), lo stato "in lavorazione" del wizard — giornate
+    // multiple con relativi orari, ricambi selezionati, step corrente —
+    // veniva scritto solo quando si premeva "Avanti". Se il telefono va in
+    // standby o il browser si chiude PRIMA di quel momento, quella parte
+    // si perdeva. Qui salviamo lo stato completo ogni volta che la pagina
+    // sta per uscire dal primo piano (standby, cambio app, chiusura) o su
+    // ogni cambio di step, così il ripristino è sempre aggiornato.
+    function autoSalvaStatoWizard() {
+        try {
+            const stato = {
+                wizCur, wizGiornate, wizGiornoIdx, wizTecExtra,
+                wizRicDaCalendario, wizRicManuali, wizRicSceltaValore,
+                wizTicketImportato
+            };
+            localStorage.setItem('tmc_wizard_state', JSON.stringify(stato));
+        } catch(e) { /* localStorage pieno o non disponibile: non bloccare l'app */ }
+    }
+
+    function ripristinaStatoWizard() {
+        try {
+            const raw = localStorage.getItem('tmc_wizard_state');
+            if (!raw) return;
+            const stato = JSON.parse(raw);
+            wizGiornate         = stato.wizGiornate || [];
+            wizGiornoIdx         = stato.wizGiornoIdx || 0;
+            wizTecExtra          = stato.wizTecExtra || [];
+            wizRicDaCalendario   = stato.wizRicDaCalendario || [];
+            wizRicManuali        = stato.wizRicManuali || [];
+            wizRicSceltaValore   = stato.wizRicSceltaValore ?? null;
+            wizTicketImportato   = stato.wizTicketImportato || false;
+            wizRenderTecExtra();
+            // Riporta l'utente esattamente allo step dove era rimasto
+            if (stato.wizCur && stato.wizCur !== 1) wizShowScreen(stato.wizCur);
+        } catch(e) { /* stato corrotto o assente: si parte da zero, nessun errore visibile */ }
+    }
 
     function wizAggiornaLampeggio() {
         const btnImporta = document.querySelector('.wiz-sync-btn');
@@ -1017,6 +1071,7 @@
         if (step === '4r') wizRicRipristina();
         if (step === 5)    { wizPopolaRiepilogo(); wizCheckEmail(); }
         wizAggiornaLampeggio();
+        autoSalvaStatoWizard();
         window.scrollTo(0, 0);
     }
 
@@ -1639,6 +1694,7 @@
         o.c = document.getElementById('wt_c')?.checked || false;
         o.h = document.getElementById('wt_h')?.checked || false;
         g.orari[nome] = o;
+        autoSalvaStatoWizard();
     }
 
     function wizCopiaOrariSuTutti() {
@@ -2054,6 +2110,9 @@
         const savedMode = localStorage.getItem('tmc_mode') || 'wizard';
         setMode(savedMode);
         loadDraft();
+        // Ripristina lo stato del wizard (giornate, ricambi, step) se
+        // presente da una sessione precedente interrotta (standby/chiusura)
+        ripristinaStatoWizard();
     }
     function validaCampiObbligatori() {
         let ticket = document.getElementById('n_rapporto_input').value.trim();
