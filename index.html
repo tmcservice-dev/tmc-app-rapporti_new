@@ -248,6 +248,9 @@
         .btn-invio-email { background: #e91e63; }
         .btn-invio-giorno { background: var(--tmc-blue); }
         .btn-invio-ricambio { background: #6a1b9a; }
+        /* Pulsanti "+ GIORNO/TECNICO" e "+ RICAMBIO": visibili solo in
+           modalità A4, con altezza dimezzata rispetto ai pulsanti di invio */
+        #quick-add-bar .btn-invio { padding: 10px 10px; font-size: 13px; }
         .btn-blue { background: var(--tmc-blue); } .btn-green { background: #25D366; } .btn-orange { background: #ff9800; } .btn-dark { background: #444; }
         .btn-sync { position: absolute; right: 10px; top: 10px; font-size: 20px; background: none; border: none; cursor: pointer; z-index: 10; }
         @media print { body { background: white; } .page-a4 { margin: 0; border: none; box-shadow: none; width: 210mm; height: auto; min-height: 297mm; padding: 2mm 8mm; } .no-print, .btn-sync, .mode-toggle-bar { display: none !important; } .card, tr, .bottom-grid, .main-title-container { page-break-inside: avoid; break-inside: avoid; } }
@@ -956,7 +959,12 @@
         const toggleBar = document.querySelector('.mode-toggle-bar');
         const quickAddBar = document.getElementById('quick-add-bar');
         if (toggleBar) toggleBar.style.maxWidth = largh;
-        if (quickAddBar) quickAddBar.style.maxWidth = largh;
+        if (quickAddBar) {
+            quickAddBar.style.maxWidth = largh;
+            // "+ GIORNO/TECNICO" e "+ RICAMBIO" hanno senso solo nel modulo A4:
+            // nel wizard le giornate/ricambi si gestiscono dai rispettivi step.
+            quickAddBar.style.display = isWiz ? 'none' : 'flex';
+        }
         // Quando si passa al modulo A4, aggiorna tutti i totali
         if (!isWiz) calc();
         localStorage.setItem('tmc_mode', mode);
