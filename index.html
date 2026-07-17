@@ -184,6 +184,9 @@
         .ric-riga input.ric-desc { flex:1; text-transform:uppercase; }
         .ric-riga input.ric-qta  { width:52px; text-align:center; font-weight:bold; color:var(--tmc-blue); }
         .ric-riga .ric-del { background:none; border:none; color:#ff4444; font-size:20px; font-weight:bold; cursor:pointer; padding:0 4px; flex-shrink:0; }
+        .ric-non-usato { opacity: 0.4; }
+        .ric-non-usato input { text-decoration: line-through; }
+        @media print { .ric-non-usato { display: none !important; } }
 
         /* ── CALENDARIO PICKER ── */
         .cal-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9500; align-items:center; justify-content:center; padding:20px; box-sizing:border-box; }
@@ -1288,9 +1291,15 @@
         ricCount = 0;
         const suf = document.getElementById('wiz-ric-cliente')?.checked ? ' (FORN. CLIENTE)' : '';
         wizRicDaCalendario.filter(r => r.selezionato)
-            .forEach(r => addRicambioConDati('', r.desc + suf, r.qta, '', ''));
+            .forEach(r => {
+                const { descrizione, codice } = _estraiCodiceMateriale(r.desc);
+                addRicambioConDati(codice, descrizione + suf, r.qta, '', '', true);
+            });
         wizRicManuali.filter(r => r.desc.trim())
-            .forEach(r => addRicambioConDati('', r.desc + suf, r.qta, '', ''));
+            .forEach(r => {
+                const { descrizione, codice } = _estraiCodiceMateriale(r.desc);
+                addRicambioConDati(codice, descrizione + suf, r.qta, '', '', true);
+            });
         calc();
     }
 
@@ -1802,11 +1811,36 @@
 
     // ── FINE MATERIALI (step 4b rimosso, logica unificata in step 4r) ─────
 
-    // Aggiunge una riga ricambio precompilata nella tabella A4 (usata da wizRicSyncA4)
-    function addRicambioConDati(codice, descrizione, qta, unitPrice, totale) {
+    // Se il testo contiene un trattino, tutto ciò che sta a destra
+    // dell'ULTIMO trattino diventa il codice ricambio, il resto la descrizione.
+    // Es. "GUARNIZIONE OR - GX2201" → descrizione "GUARNIZIONE OR", codice "GX2201".
+    function _estraiCodiceMateriale(testoGrezzo) {
+        const testo = (testoGrezzo || '').trim();
+        const idx = testo.lastIndexOf('-');
+        if (idx === -1) return { descrizione: testo, codice: '' };
+        const desc = testo.slice(0, idx).trim();
+        const cod  = testo.slice(idx + 1).trim();
+        if (!cod) return { descrizione: testo, codice: '' };
+        return { descrizione: desc || testo, codice: cod };
+    }
+
+    function toggleRicambioUsato(checkbox) {
+        aggiornaStileRigaRicambio(checkbox);
+        saveDraft();
+    }
+
+    function aggiornaStileRigaRicambio(checkbox) {
+        const tr = checkbox && checkbox.closest('tr');
+        if (!tr) return;
+        tr.classList.toggle('ric-non-usato', !checkbox.checked);
+    }
+
+    // Aggiunge una riga ricambio precompilata nella tabella A4 (usata da wizRicSyncA4 e dall'import calendario)
+    function addRicambioConDati(codice, descrizione, qta, unitPrice, totale, usato = true) {
         ricCount++;
         const tr = document.createElement('tr');
         tr.innerHTML = `
+            <td class="no-print" style="text-align:center;"><input type="checkbox" class="save-data" name="rf_${ricCount}" ${usato ? 'checked' : ''} style="width:20px;height:20px;cursor:pointer;" onchange="toggleRicambioUsato(this)"></td>
             <td><input type="text" class="save-data caps" name="rc_${ricCount}" value="${codice}"></td>
             <td><input type="text" class="save-data caps" name="rd_${ricCount}" value="${descrizione.toUpperCase()}"></td>
             <td><input type="number" class="save-data qta" name="rq_${ricCount}" value="${qta}"></td>
@@ -1815,6 +1849,7 @@
         `;
         document.getElementById('ricambi-body').appendChild(tr);
         attachListeners();
+        aggiornaStileRigaRicambio(document.getElementsByName(`rf_${ricCount}`)[0]);
     }
 
     function wizToggleTec(btn) {
@@ -2360,18 +2395,22 @@
         wizRicAggiornaPulsanti();
 
         // ── COMPILA SUBITO LA TABELLA RICAMBI DEL MODULO A4 ─────
-        // Prima comparivano solo passando dal wizard (step Ricambi).
-        // Ora vengono scritti subito in A4 ad ogni importazione,
-        // restando comunque modificabili/cancellabili a mano.
+        // Compilata ad ogni importazione (sia da modalità A4 che wizard),
+        // con flag "usato" spento di default: il tecnico deve confermare
+        // spuntando quali materiali ha davvero installato. Se il testo
+        // contiene un trattino, la parte a destra diventa il codice.
         document.getElementById('ricambi-body').innerHTML = '';
         ricCount = 0;
         if (data.materiali && data.materiali.length > 0) {
-            data.materiali.forEach(m => addRicambioConDati('', m.testo, m.qtaSuggerita || 1, '', ''));
+            data.materiali.forEach(m => {
+                const { descrizione, codice } = _estraiCodiceMateriale(m.testo);
+                addRicambioConDati(codice, descrizione, m.qtaSuggerita || 1, '', '', false);
+            });
         } else {
             addRicambio();
         }
-        calc();    
-        
+        calc();
+
         document.getElementById('id_univoco_input').value = "";
         generaIdUnivoco(); saveDraft();
 
@@ -2451,6 +2490,9 @@
         }
         const ricambi = [];
         for (let i = 1; i <= ricCount; i++) {
+            const flagEl = document.getElementsByName(`rf_${i}`)[0];
+            const usato = flagEl ? flagEl.checked : true; // bozze vecchie senza flag: trattate come usate
+            if (!usato) continue; // materiale elencato ma non utilizzato: non finisce sul rapportino
             const cod = document.getElementsByName(`rc_${i}`)[0]?.value || '';
             const des = document.getElementsByName(`rd_${i}`)[0]?.value || '';
             const qta = document.getElementsByName(`rq_${i}`)[0]?.value || '';
@@ -3252,6 +3294,8 @@
         if(totH>0)r+=`Hotel: ${totH}\n`;
         let ric=[];
         for(let i=1;i<=ricCount;i++){
+            const flagEl = document.getElementsByName(`rf_${i}`)[0];
+            if (flagEl && !flagEl.checked) continue; // non utilizzato: non va nel riepilogo calendario
             let d=document.getElementsByName(`rd_${i}`)[0]?.value;
             let q=document.getElementsByName(`rq_${i}`)[0]?.value;
             if(d&&q&&parseFloat(q)>0)ric.push(`- ${q}x ${d.toUpperCase()}`);
@@ -3269,7 +3313,7 @@
     function apriEditorOrari(rowIdx) { currentEditRow=rowIdx; const tecName=document.getElementsByName(`tec_${rowIdx}`)[0].value||`TECNICO RIGA ${rowIdx}`; document.getElementById('modal_time_title').innerText=`ORARI: ${tecName.toUpperCase()}`; ['va1','va2','lm1','lm2','lp1','lp2','vr1'].forEach(f=>{ document.getElementById(`modal_${f}`).innerHTML=getTimeOptions(false); }); document.getElementById('modal_vr2').innerHTML=getTimeOptions(true); document.getElementById('modal_d').value=formattaDataPerModal(document.getElementsByName(`d_${rowIdx}`)[0].value); ['va1','va2','lm1','lm2','lp1','lp2','vr1','vr2'].forEach(f=>{ document.getElementById(`modal_${f}`).value=document.getElementsByName(`${f}_${rowIdx}`)[0].value; }); document.getElementById('modal_p').checked=document.getElementsByName(`p_${rowIdx}`)[0].checked; document.getElementById('modal_c').checked=document.getElementsByName(`c_${rowIdx}`)[0].checked; document.getElementById('modal_h').checked=document.getElementsByName(`h_${rowIdx}`)[0].checked; const copyTo=document.getElementById('modal_copy_to'); copyTo.innerHTML='<option value="">-- Non copiare --</option>'; for(let i=1;i<=rowCount;i++){ if(i!==rowIdx){ const name=document.getElementsByName(`tec_${i}`)[0].value||`Riga ${i}`; copyTo.innerHTML+=`<option value="${i}">${name.toUpperCase()}</option>`; } } document.getElementById('time-editor-overlay').style.display='flex'; }
     function chiudiEditorOrari(salva) { if(salva&&currentEditRow){ const ri=currentEditRow; const tf=['va1','va2','lm1','lm2','lp1','lp2','vr1','vr2']; document.getElementsByName(`d_${ri}`)[0].value=formattaDataPerTabella(document.getElementById('modal_d').value); tf.forEach(f=>{ document.getElementsByName(`${f}_${ri}`)[0].value=document.getElementById(`modal_${f}`).value; }); document.getElementsByName(`p_${ri}`)[0].checked=document.getElementById('modal_p').checked; document.getElementsByName(`c_${ri}`)[0].checked=document.getElementById('modal_c').checked; document.getElementsByName(`h_${ri}`)[0].checked=document.getElementById('modal_h').checked; const ct=document.getElementById('modal_copy_to').value; if(ct){ document.getElementsByName(`d_${ct}`)[0].value=formattaDataPerTabella(document.getElementById('modal_d').value); tf.forEach(f=>{ document.getElementsByName(`${f}_${ct}`)[0].value=document.getElementById(`modal_${f}`).value; }); document.getElementsByName(`p_${ct}`)[0].checked=document.getElementById('modal_p').checked; document.getElementsByName(`c_${ct}`)[0].checked=document.getElementById('modal_c').checked; document.getElementsByName(`h_${ct}`)[0].checked=document.getElementById('modal_h').checked; } calc(); } document.getElementById('time-editor-overlay').style.display='none'; }
     function modalAutoFill(el) { const selects=Array.from(document.querySelectorAll('.modal-time-select')); const idx=selects.indexOf(el); if(idx!==-1&&idx<selects.length-1){ const next=selects[idx+1]; if(next&&!next.value)next.value=el.value; } }
-    function addRicambio() { ricCount++; const tr=document.createElement('tr'); tr.innerHTML=`<td><input type="text" class="save-data caps" name="rc_${ricCount}"></td><td><input type="text" class="save-data caps" name="rd_${ricCount}"></td><td><input type="number" class="save-data qta" name="rq_${ricCount}"></td><td><input type="text" class="save-data unit" name="ru_${ricCount}"></td><td><input type="text" class="save-data tot-riga" name="rt_${ricCount}"></td>`; document.getElementById('ricambi-body').appendChild(tr); attachListeners(); }
+    function addRicambio() { ricCount++; const tr=document.createElement('tr'); tr.innerHTML=`<td class="no-print" style="text-align:center;"><input type="checkbox" class="save-data" name="rf_${ricCount}" checked style="width:20px;height:20px;cursor:pointer;" onchange="toggleRicambioUsato(this)"></td><td><input type="text" class="save-data caps" name="rc_${ricCount}"></td><td><input type="text" class="save-data caps" name="rd_${ricCount}"></td><td><input type="number" class="save-data qta" name="rq_${ricCount}"></td><td><input type="text" class="save-data unit" name="ru_${ricCount}"></td><td><input type="text" class="save-data tot-riga" name="rt_${ricCount}"></td>`; document.getElementById('ricambi-body').appendChild(tr); attachListeners(); }
     function calc() { function toMin(t){if(!t||t===RIT_LABEL)return 0; const p=t.split(':'); return parseInt(p[0])*60+parseInt(p[1]);} const getDiff=(t1,t2)=>{ if(!t1||!t2||t2===RIT_LABEL)return 0; let m1=toMin(t1),m2=toMin(t2); if(m2<m1)m2+=1440; return m2-m1;}; let totL=0,totV=0,totP=0,totC=0,totH=0,hasRit=false; for(let i=1;i<=rowCount;i++){ const g=(n)=>document.getElementsByName(`${n}_${i}`)[0]?.value||""; const gc=(n)=>document.getElementsByName(`${n}_${i}`)[0]?.checked||false; let va1=g('va1'),va2=g('va2'),lm1=g('lm1'),lm2=g('lm2'),lp1=g('lp1'),lp2=g('lp2'),vr1=g('vr1'),vr2=g('vr2'); if(vr2===RIT_LABEL)hasRit=true; let mv=getDiff(va1,va2)+getDiff(vr1,vr2); let ml=getDiff(lm1,lm2)+getDiff(lp1,lp2); totV+=mv; totL+=ml; let tot=mv+ml; const div=document.getElementById(`ore_riga_${i}`); if(div){ if(tot>0){let h=Math.floor(tot/60),m=tot%60; div.innerText=`${h}h${m>0?' '+m+'m':''}`;}else div.innerText=""; } if(gc('p'))totP++; if(gc('c'))totC++; if(gc('h'))totH++; } const fmt=(m)=>{ if(m===0)return""; let h=Math.floor(m/60),m2=m%60; return`${h}h${m2>0?' '+m2+'m':''}`.trim();}; let all=totL+totV; let lbl=all>0?fmt(all):""; if(hasRit&&lbl)lbl+=" + ritorno"; const sl=document.getElementById('tot_lavoro_span'); const sp=document.getElementById('tot_pch_span'); const sh=document.getElementById('tot_hotel_span'); if(sl)sl.innerText=lbl; if(sp)sp.innerText=totP+totC>0?`${totP+totC}`:""; if(sh)sh.innerText=totH>0?`${totH}`:""; saveDraft(); }
     function openSignature() { const ov=document.getElementById('signature-overlay'); ov.style.display='flex'; canvas.width=canvas.offsetWidth; canvas.height=canvas.offsetHeight; ctx.lineWidth=3; ctx.strokeStyle="#000"; ctx.lineCap="round"; }
     function closeSignature(save) {
@@ -3341,7 +3385,7 @@
     function getPos(e){const r=canvas.getBoundingClientRect(); const cx=e.touches?e.touches[0].clientX:e.clientX; const cy=e.touches?e.touches[0].clientY:e.clientY; return{x:cx-r.left,y:cy-r.top};}
     // (listener canvas spostati dentro window.onload)
     function saveDraft(){const data={};document.querySelectorAll('.save-data').forEach(el=>data[el.name]=(el.type==='checkbox'?el.checked:el.value));localStorage.setItem('tmc_bozza',JSON.stringify(data));localStorage.setItem('tmc_counts',JSON.stringify({r:rowCount,ric:ricCount}));}
-    function loadDraft(){const counts=JSON.parse(localStorage.getItem('tmc_counts')||'{"r":1,"ric":1}');document.getElementById('table-body').innerHTML="";document.getElementById('ricambi-body').innerHTML="";rowCount=0;ricCount=0;for(let i=0;i<counts.r;i++)addRow();for(let i=0;i<counts.ric;i++)addRicambio();const saved=JSON.parse(localStorage.getItem('tmc_bozza')||'{}');if(!saved['descrizione']||saved['descrizione'].trim()==="")saved['descrizione']=FRASE_SICUREZZA;let tCount=1;while(saved['tecnico_'+tCount]!==undefined){if(tCount>1)aggiungiRigaTecnico(saved['tecnico_'+tCount],false);else document.getElementsByName('tecnico_1')[0].value=(saved['tecnico_1']||"").toUpperCase();tCount++;}document.querySelectorAll('.save-data').forEach(el=>{if(saved[el.name]!==undefined)el.type==='checkbox'?el.checked=saved[el.name]:el.value=saved[el.name];});const sig=localStorage.getItem('tmc_sig');if(sig){document.getElementById('sig-image').src=sig;document.getElementById('sig-image').style.display='block';document.getElementById('placeholder-firma').style.display='none';}else{document.getElementById('sig-image').src="";document.getElementById('sig-image').style.display='none';document.getElementById('placeholder-firma').style.display='inline';}setTipo(saved['tipo_int']||'P');
+    function loadDraft(){const counts=JSON.parse(localStorage.getItem('tmc_counts')||'{"r":1,"ric":1}');document.getElementById('table-body').innerHTML="";document.getElementById('ricambi-body').innerHTML="";rowCount=0;ricCount=0;for(let i=0;i<counts.r;i++)addRow();for(let i=0;i<counts.ric;i++)addRicambio();const saved=JSON.parse(localStorage.getItem('tmc_bozza')||'{}');if(!saved['descrizione']||saved['descrizione'].trim()==="")saved['descrizione']=FRASE_SICUREZZA;let tCount=1;while(saved['tecnico_'+tCount]!==undefined){if(tCount>1)aggiungiRigaTecnico(saved['tecnico_'+tCount],false);else document.getElementsByName('tecnico_1')[0].value=(saved['tecnico_1']||"").toUpperCase();tCount++;}document.querySelectorAll('.save-data').forEach(el=>{if(saved[el.name]!==undefined)el.type==='checkbox'?el.checked=saved[el.name]:el.value=saved[el.name];});document.querySelectorAll('#ricambi-body input[name^="rf_"]').forEach(cb => aggiornaStileRigaRicambio(cb));const sig=localStorage.getItem('tmc_sig');if(sig){document.getElementById('sig-image').src=sig;document.getElementById('sig-image').style.display='block';document.getElementById('placeholder-firma').style.display='none';}else{document.getElementById('sig-image').src="";document.getElementById('sig-image').style.display='none';document.getElementById('placeholder-firma').style.display='inline';}setTipo(saved['tipo_int']||'P');
     // Ripristina campi wizard
     if(saved['n_rapporto'])document.getElementById('w_ticket').value=saved['n_rapporto'];
     if(saved['cliente'])document.getElementById('w_cliente').value=saved['cliente'];
