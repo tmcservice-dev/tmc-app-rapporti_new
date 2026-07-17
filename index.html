@@ -2359,6 +2359,19 @@
         wizRicManuali = [];
         wizRicAggiornaPulsanti();
 
+        // ── COMPILA SUBITO LA TABELLA RICAMBI DEL MODULO A4 ─────
+        // Prima comparivano solo passando dal wizard (step Ricambi).
+        // Ora vengono scritti subito in A4 ad ogni importazione,
+        // restando comunque modificabili/cancellabili a mano.
+        document.getElementById('ricambi-body').innerHTML = '';
+        ricCount = 0;
+        if (data.materiali && data.materiali.length > 0) {
+            data.materiali.forEach(m => addRicambioConDati('', m.testo, m.qtaSuggerita || 1, '', ''));
+        } else {
+            addRicambio();
+        }
+        calc();    
+        
         document.getElementById('id_univoco_input').value = "";
         generaIdUnivoco(); saveDraft();
 
