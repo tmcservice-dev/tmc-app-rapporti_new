@@ -21,12 +21,12 @@
         /* ── TOGGLE MODALITÀ ── */
         .mode-toggle-bar {
             display: flex; align-items: center; justify-content: center;
-            gap: 0; max-width: 480px; margin: 12px auto; padding: 0 10px;
+            gap: 0; max-width: 480px; margin: 4px auto 2px; padding: 0 10px;
             box-sizing: border-box;
         }
         .mode-toggle-bar button {
-            flex: 1; padding: 10px 8px; border: 1.5px solid var(--tmc-blue);
-            font-size: 13px; font-weight: bold; cursor: pointer;
+            flex: 1; padding: 6px 8px; border: 1.5px solid var(--tmc-blue);
+            font-size: 12px; font-weight: bold; cursor: pointer;
             transition: background .15s, color .15s;
         }
         .mode-toggle-bar button:first-child { border-radius: 6px 0 0 6px; border-right: none; }
@@ -241,16 +241,16 @@
         #signature-overlay { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:white; z-index: 9999; flex-direction: column; }
         #canvas-fullscreen { flex-grow: 1; border: 3px solid var(--tmc-blue); margin: 15px; background: #fafafa; touch-action: none; }
         .footer-static { width: 66%; display: block; margin: 5px auto; }
-        .no-print { display: flex; flex-wrap: wrap; gap: 10px; padding: 15px; max-width: 210mm; margin: 0 auto; justify-content: center; }
-        .btn { flex: 1; min-width: 90px; padding: 12px 5px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; color: white; font-size: 11px; text-align: center; }
-        .btn-invio { flex: 1; min-width: 140px; padding: 20px 10px; border: none; border-radius: 9px; font-weight: bold; cursor: pointer; color: white; font-size: 15px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.28); letter-spacing: 0.3px; }
+        .no-print { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 15px; max-width: 210mm; margin: 0 auto; justify-content: center; }
+        .btn { flex: 1; min-width: 90px; padding: 8px 5px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; color: white; font-size: 11px; text-align: center; }
+        .btn-invio { flex: 1; min-width: 140px; padding: 12px 8px; border: none; border-radius: 7px; font-weight: bold; cursor: pointer; color: white; font-size: 13px; text-align: center; box-shadow: 0 3px 8px rgba(0,0,0,0.25); letter-spacing: 0.3px; }
         .btn-invio-whatsapp { background: #25D366; }
         .btn-invio-email { background: #e91e63; }
         .btn-invio-giorno { background: var(--tmc-blue); }
         .btn-invio-ricambio { background: #6a1b9a; }
         /* Pulsanti "+ GIORNO/TECNICO" e "+ RICAMBIO": visibili solo in
            modalità A4, con altezza dimezzata rispetto ai pulsanti di invio */
-        #quick-add-bar .btn-invio { padding: 10px 10px; font-size: 13px; }
+        #quick-add-bar .btn-invio { padding: 6px 8px; font-size: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
         .btn-blue { background: var(--tmc-blue); } .btn-green { background: #25D366; } .btn-orange { background: #ff9800; } .btn-dark { background: #444; }
         .btn-sync { position: absolute; right: 10px; top: 10px; font-size: 20px; background: none; border: none; cursor: pointer; z-index: 10; }
         @media print { body { background: white; } .page-a4 { margin: 0; border: none; box-shadow: none; width: 210mm; height: auto; min-height: 297mm; padding: 2mm 8mm; } .no-print, .btn-sync, .mode-toggle-bar { display: none !important; } .card, tr, .bottom-grid, .main-title-container { page-break-inside: avoid; break-inside: avoid; } }
@@ -384,7 +384,7 @@
         </div>
 
         <!-- ── AGGIUNTA RAPIDA: giorno/tecnico e ricambio (stesse dimensioni dei pulsanti di invio) ── -->
-        <div class="no-print" id="quick-add-bar" style="max-width:480px; box-sizing:border-box; margin:0 auto; padding:0 15px 15px; display:flex; gap:10px;">
+        <div class="no-print" id="quick-add-bar" style="max-width:480px; box-sizing:border-box; margin:0 auto; padding:0 15px 6px; display:flex; gap:8px;">
             <button class="btn-invio btn-invio-giorno" onclick="addRow()">📅 + GIORNO/TECNICO</button>
             <button class="btn-invio btn-invio-ricambio" onclick="addRicambio()">🔧 + RICAMBIO</button>
         </div>
@@ -786,22 +786,22 @@
                     <button class="btn-invio btn-invio-email" onclick="inviaEmailAutomaticamente()">📧 INVIA EMAIL + CALENDARIO</button>
                 </div>
 
-                <button class="btn btn-blue" style="width:100%; margin-top:10px;" onclick="salvaPDF()">💾 SALVA PDF</button>
+                <button class="btn btn-blue" style="width:100%; margin-top:5px;" onclick="salvaPDF()">💾 SALVA PDF</button>
 
                 <!-- Bozze + JSON: stessa riga -->
-                <div style="display:flex; gap:8px; width:100%; margin-top:8px;">
+                <div style="display:flex; gap:6px; width:100%; margin-top:5px;">
                     <button class="btn btn-orange" style="background:#ff9800;" onclick="apriBozze()">📂 BOZZE</button>
                     <button class="btn btn-dark" style="background:#009688;" onclick="esportaDatiJSON()">📤 ESPORTA JSON</button>
                     <button class="btn btn-dark" style="background:#795548;" onclick="document.getElementById('import-json-input').click()">📥 IMPORTA JSON</button>
                 </div>
                 <input type="file" id="import-json-input" accept="application/json,.json" style="display:none;" onchange="importaDatiJSON(this.files[0])">
 
-                <div style="display:flex; gap:8px; width:100%; margin-top:8px;">
+                <div style="display:flex; gap:6px; width:100%; margin-top:5px;">
                     <button class="btn" style="background:red;" onclick="nuovoRapporto()">RESET NUOVO</button>
                     <button class="btn btn-dark" style="background:#607d8b;" onclick="modificaEmailTecnico()">✉️ MIA EMAIL CONFERMA</button>
                 </div>
 
-                <button class="btn btn-dark" style="width:100%; margin-top:10px;" onclick="esciApp()">🔒 ESCI E RIMUOVI AUTORIZZAZIONE</button>
+                <button class="btn btn-dark" style="width:100%; margin-top:5px;" onclick="esciApp()">🔒 ESCI E RIMUOVI AUTORIZZAZIONE</button>
             </div>
         </div>
     </div>
@@ -2140,6 +2140,7 @@
             const data = await response.json();
             if(data.success) {
                 localStorage.setItem('tmc_auth_token', input);
+                localStorage.setItem('tmc_auth_time', Date.now().toString());
                 // Controlla se l'email tecnico è già stata impostata
                 const emailTec = localStorage.getItem('tmc_email_tecnico');
                 if (emailTec === null) {
@@ -2192,6 +2193,7 @@
     function esciApp(chiediConferma = true) {
         if(!chiediConferma || confirm("Vuoi rimuovere l'autorizzazione?")) {
             localStorage.removeItem('tmc_auth_token');
+            localStorage.removeItem('tmc_auth_time');
             // NON rimuovere tmc_email_tecnico: rimane salvata per il prossimo accesso
             location.reload();
         }
@@ -3523,7 +3525,14 @@
             canvas.addEventListener('touchend', () => drawing=false);
         }
         const savedPin = localStorage.getItem('tmc_auth_token');
-        if(savedPin && savedPin !== '') sbloccaApp();
+        const authTime = parseInt(localStorage.getItem('tmc_auth_time') || '0');
+        const ORE_SCADENZA = 24;
+        const scaduto = authTime > 0 && (Date.now() - authTime) > ORE_SCADENZA * 60 * 60 * 1000;
+        if (scaduto) {
+            localStorage.removeItem('tmc_auth_token');
+            localStorage.removeItem('tmc_auth_time');
+        }
+        if(savedPin && savedPin !== '' && !scaduto) sbloccaApp();
         else { document.getElementById('login-overlay').style.display = 'flex'; document.getElementById('app-content').style.display = 'none'; }
         document.getElementById('pin_input').addEventListener("keypress", function(e){ if(e.key==="Enter"){ e.preventDefault(); verificaLogin(); } });
         document.getElementById('email_tecnico_input').addEventListener("keypress", function(e){ if(e.key==="Enter"){ e.preventDefault(); salvaEmailTecnico(); } });
