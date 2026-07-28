@@ -535,7 +535,7 @@
                     <h2>Quando e per quanto tempo?</h2>
                     <p>Gestisci una o più giornate di intervento. Per ogni giornata scegli i tecnici presenti.</p>
                 </div>
-                <div class="wiz-alert" id="werr3">⚠️ Inserisci almeno un orario di lavoro per la prima giornata.</div>
+                <div class="wiz-alert" id="werr3">⚠️ Compila la data e almeno un orario di lavoro per ogni giornata.</div>
 
                 <!-- Selettore giornata -->
                 <div style="background:#f8fbff; border:1px solid #cce0f5; border-radius:6px; padding:10px 12px; margin-bottom:12px;">
@@ -1166,15 +1166,35 @@
         document.getElementById('werr3').style.display = 'none';
         // Salva orari correnti prima di validare
         wizSalvaOrariTabCorrente();
-        // Almeno una giornata deve avere un tecnico con orario di lavoro
         if (!wizGiornate.length) return false;
+
+        // Controlla che OGNI giornata abbia la data compilata
+        for (let idx = 0; idx < wizGiornate.length; idx++) {
+            if (!wizGiornate[idx].data) {
+                document.getElementById('werr3').textContent =
+                    '⚠️ La Giornata ' + (idx + 1) + ' non ha la DATA compilata. Seleziona la data prima di proseguire.';
+                // Porta l'utente sulla giornata senza data
+                wizGiornoIdx = idx;
+                wizRenderGiorno();
+                return false;
+            }
+        }
+
+        // Almeno una giornata deve avere un tecnico con orario di lavoro
+        let haOrario = false;
         for (const g of wizGiornate) {
             for (const nome of g.tecniciPresenti) {
                 const o = g.orari[nome] || {};
-                if ((o.lm1 && o.lm2) || (o.lp1 && o.lp2)) return true;
+                if ((o.lm1 && o.lm2) || (o.lp1 && o.lp2)) { haOrario = true; break; }
             }
+            if (haOrario) break;
         }
-        return false;
+        if (!haOrario) {
+            document.getElementById('werr3').textContent =
+                '⚠️ Inserisci almeno un orario di lavoro per la prima giornata.';
+            return false;
+        }
+        return true;
     }
     function wizVal4() {
         document.getElementById('werr4').style.display = 'none';
@@ -2055,6 +2075,19 @@
     function wizInvia() {
         if (!localStorage.getItem('tmc_sig')) { document.getElementById('werr5').style.display = 'block'; return; }
         document.getElementById('werr5').style.display = 'none';
+
+        // ── Rete di sicurezza: ricontrolla data e lavoro svolto ──
+        let errFinali = [];
+        for (let idx = 0; idx < wizGiornate.length; idx++) {
+            if (!wizGiornate[idx].data) errFinali.push('• DATA mancante nella Giornata ' + (idx + 1));
+        }
+        const lavoroTxt = (document.getElementById('w_lavoro')?.value || '').trim();
+        if (lavoroTxt.length < 10) errFinali.push('• LAVORO ESEGUITO non compilato (minimo 10 caratteri)');
+        if (errFinali.length > 0) {
+            alert('⚠️ Impossibile inviare — mancano dati obbligatori:\n\n' + errFinali.join('\n'));
+            return;
+        }
+
         // Avvisa se manca email ma lascia procedere
         const em = document.getElementById('w_email').value.trim();
         if (!em || !em.includes('@')) {
@@ -2070,6 +2103,19 @@
     function wizWhatsapp() {
         if (!localStorage.getItem('tmc_sig')) { document.getElementById('werr5').style.display = 'block'; return; }
         document.getElementById('werr5').style.display = 'none';
+
+        // ── Rete di sicurezza: ricontrolla data e lavoro svolto ──
+        let errFinali = [];
+        for (let idx = 0; idx < wizGiornate.length; idx++) {
+            if (!wizGiornate[idx].data) errFinali.push('• DATA mancante nella Giornata ' + (idx + 1));
+        }
+        const lavoroTxt = (document.getElementById('w_lavoro')?.value || '').trim();
+        if (lavoroTxt.length < 10) errFinali.push('• LAVORO ESEGUITO non compilato (minimo 10 caratteri)');
+        if (errFinali.length > 0) {
+            alert('⚠️ Impossibile inviare — mancano dati obbligatori:\n\n' + errFinali.join('\n'));
+            return;
+        }
+
         wizSyncTecnici();
         wizSyncAllOrariA4();
         generaIdUnivoco();
@@ -2170,7 +2216,33 @@
         if (!ticket || ticket === "TCK-") errori.push("• RAPPORTO INTERVENTO N.");
         if (!cliente) errori.push("• NOME CLIENTE");
         if (oreLavoroText === "") errori.push("• ORE DI LAVORO (Compilare almeno un orario di Lavoro)");
-        if (errori.length > 0) { alert("⚠️ ATTENZIONE:\n\n" + errori.join("\n")); return false; }
+
+        // Controlla che almeno la prima riga abbia la DATA compilata
+        let primaData = document.getElementsByName('d_1')[0];
+        if (!primaData || !primaData.value.trim()) {
+            errori.push("• DATA INTERVENTO (Compilare la data nella tabella degli orari)");
+        }
+
+        // Controlla che il campo LAVORO ESEGUITO non sia vuoto
+        let descrizione = document.getElementById('descrizione_input').value.trim();
+        let lavoroPresente = false;
+        if (descrizione) {
+            // Cerca la sezione "LAVORO ESEGUITO:" e verifica che ci sia testo dopo
+            let matchLav = descrizione.match(/LAVORO ESEGUITO[:\s]*([\s\S]*?)(?:MACCHINA LASCIATA|$)/i);
+            if (matchLav && matchLav[1].trim().length >= 5) {
+                lavoroPresente = true;
+            }
+            // Se non c'è il separatore, controlla che ci sia almeno del testo significativo
+            if (!lavoroPresente && descrizione.length >= 10 && descrizione.indexOf('LAVORO ESEGUITO') === -1) {
+                // Nessun separatore ma c'è testo: avvisa ma non blocca
+                lavoroPresente = true;
+            }
+        }
+        if (!lavoroPresente) {
+            errori.push("• LAVORO ESEGUITO (Descrivi il lavoro svolto nell'intervento)");
+        }
+
+        if (errori.length > 0) { alert("⚠️ ATTENZIONE — Campi obbligatori mancanti:\n\n" + errori.join("\n")); return false; }
         return true;
     }
     // salvaPDF è definita più avanti nella sezione PDF jsPDF
