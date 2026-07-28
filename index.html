@@ -3100,7 +3100,7 @@
         esportaDatiJSON();
 
         let testoCal = document.getElementById('descrizione_input').value;
-        if (testoCal.indexOf("RAPPORTO INVIATO") === -1) testoCal += generaRiepilogoCalendario(idU);
+        testoCal += generaRiepilogoCalendario(idU, 'whatsapp');
 
         document.getElementById('loading-overlay').style.display = 'flex';
         document.getElementById('loading-text').innerText = "Generazione PDF...";
@@ -3198,7 +3198,7 @@
         esportaDatiJSON();
 
         let testoCal = document.getElementById('descrizione_input').value;
-        if (testoCal.indexOf("RAPPORTO INVIATO") === -1) testoCal += generaRiepilogoCalendario(idU);
+        testoCal += generaRiepilogoCalendario(idU, 'mail');
         const emailCliente = document.getElementById('email_input').value || '';
         const nomeCliente  = document.getElementById('cliente_input').value || 'Cliente';
         const tecnico      = document.getElementsByName('tecnico_1')[0]?.value || '';
@@ -3286,8 +3286,16 @@
             mostraEsitoEmail(false, msg, null);
         }
     }
-    function generaRiepilogoCalendario(idUnivoco) {
-        let r=`\n\n--- RAPPORTO INVIATO (${idUnivoco}) ---\n`;
+    function generaRiepilogoCalendario(idUnivoco, via) {
+        const _now = new Date();
+        const _dd = String(_now.getDate()).padStart(2,'0');
+        const _mm = String(_now.getMonth()+1).padStart(2,'0');
+        const _yy = _now.getFullYear();
+        const _hh = String(_now.getHours()).padStart(2,'0');
+        const _mi = String(_now.getMinutes()).padStart(2,'0');
+        const _dt = `${_dd}/${_mm}/${_yy} ${_hh}:${_mi}`;
+        const _via = via === 'whatsapp' ? 'VIA WHATSAPP' : 'VIA MAIL';
+        let r=`\n\n--- RAPPORTO INVIATO (${idUnivoco}) --- ${_via}\nData invio: ${_dt}\n`;
         // Nome/i tecnico/i coinvolto/i nell'intervento
         const tecnici = [];
         document.querySelectorAll('[name^="tecnico_"]').forEach(el => {
