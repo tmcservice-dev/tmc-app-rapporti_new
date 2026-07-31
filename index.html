@@ -2681,13 +2681,13 @@
             // Badge tipo intervento su riga propria (mai schiacciato o tagliato,
             // indipendentemente dalla lunghezza del ticket o dell'etichetta)
             const badgeTxt = d.tipoInt==='G' ? 'ABBONAMENTO / GARANZIA' : 'PAGAMENTO';
-            doc.setFont('helvetica','bold'); doc.setFontSize(9);
+            doc.setFont('helvetica','bold'); doc.setFontSize(8);
             const bw = doc.getTextWidth(badgeTxt)+8;
             const bx = ML+2;
             doc.setFillColor(...BLUE); doc.roundedRect(bx, y-4, bw, 6.5, 1.2, 1.2, 'F');
             doc.setTextColor(255,255,255); doc.text(badgeTxt, bx+bw/2, y, {align:'center'}); y += 4;
             // ID FATTURAZIONE più grande e leggibile
-            doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...BLUE);
+            doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...BLUE);
             doc.text(_san(`ID FATTURAZIONE: ${d.idUnivoco||'—'}`), ML+2, y); y += 3;
             doc.setDrawColor(...BLUE); doc.setLineWidth(0.4);
             doc.line(ML, y, PW-MR, y); y += 3;
