@@ -2593,7 +2593,7 @@
             const qta = document.getElementsByName(`rq_${i}`)[0]?.value || '';
             const unit= document.getElementsByName(`ru_${i}`)[0]?.value || '';
             const tot = document.getElementsByName(`rt_${i}`)[0]?.value || '';
-            if (des.trim() || cod.trim()) ricambi.push({ codice:cod, descrizione:des, qta, unit, tot });
+            if (des.trim() || cod.trim()) ricambi.push({ codice:_san(cod), descrizione:_san(des), qta, unit, tot });
         }
         return {
             ticket:    gi('n_rapporto_input')?.value || '',
@@ -2822,7 +2822,7 @@
                 styles:{fontSize:7.5,cellPadding:1.3,lineColor:BLUE,lineWidth:0.2,textColor:BLACK,valign:'middle'},
                 headStyles:{fillColor:LBLUE,textColor:BLUE,fontStyle:'bold',fontSize:7},
                 footStyles:{fillColor:[248,251,255],textColor:BLUE,fontStyle:'bold'},
-                columnStyles:{0:{cellWidth:20},1:{halign:'left'},2:{cellWidth:14,halign:'center'},3:{cellWidth:20,halign:'right'},4:{cellWidth:20,halign:'right'}},
+                columnStyles:{0:{cellWidth:30},1:{halign:'left'},2:{cellWidth:14,halign:'center'},3:{cellWidth:18,halign:'right'},4:{cellWidth:18,halign:'right'}},
                 margin:{left:ML,right:MR,top:HEADER_RESERVE,bottom:PIEDE_RESERVE},
                 tableWidth: CW,
                 didDrawPage: function(dataHook) {
@@ -2958,7 +2958,7 @@
                 let fw = maxFW, fh = fw / ratio;
                 if (fh > maxFH) { fh = maxFH; fw = fh * ratio; }
                 const fxImg = firmaX + (firmaW - fw)/2;
-                doc.addImage(sigData, fmt, fxImg, y+23, fw, fh, undefined, 'FAST');
+                doc.addImage(sigData, fmt, fxImg, y+23, fw, fh, undefined, 'SLOW');
             } catch(e) {}
         }
 
@@ -3458,7 +3458,7 @@
 
             // Scala al massimo a 360px lato lungo
             const MAXLATO = 360;
-            const scale = Math.min(MAXLATO / cropW, MAXLATO / cropH, 1);
+            const scale = Math.min(MAXLATO / cropW, MAXLATO / cropH);
             const outW = Math.max(1, Math.round(cropW * scale));
             const outH = Math.max(1, Math.round(cropH * scale));
 
@@ -3469,7 +3469,7 @@
             octx.fillRect(0, 0, outW, outH);
             octx.drawImage(canvas, minX, minY, cropW, cropH, 0, 0, outW, outH);
 
-            const url = off.toDataURL('image/jpeg', 0.6);
+            const url = off.toDataURL('image/jpeg', 0.8);
             document.getElementById('sig-image').src = url;
             document.getElementById('sig-image').style.display = 'block';
             document.getElementById('placeholder-firma').style.display = 'none';
