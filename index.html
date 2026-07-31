@@ -2677,13 +2677,13 @@
             doc.line(ML, y, PW-MR, y); y += 4;
             doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...BLUE);
             doc.text(_san(`RAPPORTO INTERVENTO N. ${d.ticket || '—'}`), ML+2, y);
-            const badgeTxt = d.tipoInt==='G' ? 'GRATUITO' : 'PAGAMENTO';
+            const badgeTxt = d.tipoInt==='G' ? 'ABBONAMENTO/GARANZIA' : 'PAGAMENTO';
             doc.setFontSize(8);
             const bw = doc.getTextWidth(badgeTxt)+6;
             doc.setFillColor(...BLUE); doc.roundedRect(PW-MR-bw, y-4, bw, 6, 1, 1, 'F');
             doc.setTextColor(255,255,255); doc.text(badgeTxt, PW-MR-bw/2, y, {align:'center'}); y += 3;
             doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(...GRAY);
-            doc.text(_san(`ID FATTURAZIONE: ${d.idUnivoco||'—'}`), ML+2, y); y += 2;
+            doc.text(_san(`ID FATTURAZIONE: ${d.idUnivoco||'—'}`), ML+2, y); y += 2;doc.setFontSize(10);
             doc.setDrawColor(...BLUE); doc.setLineWidth(0.4);
             doc.line(ML, y, PW-MR, y); y += 3;
 
