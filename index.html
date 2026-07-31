@@ -741,7 +741,7 @@
                 <img src="static/intestazione.jpg" class="banner-static">
                 <div class="main-title-container">
                     <div style="display:flex; flex-direction:column; gap:2px;"><span style="display:flex; align-items:center; gap:5px;">RAPPORTO INTERVENTO N. <input type="text" id="n_rapporto_input" name="n_rapporto" class="save-data caps" placeholder="TCK-" style="width:120px; font-size:16px; font-weight:bold; color:var(--tmc-blue);"><button type="button" class="no-print" onclick="importaDaCalendario('ticket')" style="background:var(--tmc-blue); color:white; border:none; border-radius:4px; padding:3px 8px; font-size:14px; cursor:pointer;">🔍 CERCA PER N° TICKET</button></span><span style="font-size:9px; color:#666; font-weight:normal;">ID FATTURAZIONE: <input type="text" id="id_univoco_input" name="id_univoco" class="save-data" readonly style="width:150px; font-size:12px; color:#666; border:none; outline:none; background:transparent;" placeholder="In attesa..."></span></div>
-                    <div style="display:flex; gap:2px;"><div id="box-G" class="tipo-box" onclick="setTipo('G')">ABBONAMENTO/GARANZIA</div><div id="box-P" class="tipo-box" onclick="setTipo('P')">PAGAMENTO</div><input type="hidden" name="tipo_int" id="tipo_int_hidden" class="save-data" value="P"></div>
+                    <div style="display:flex; gap:2px;"><div id="box-G" class="tipo-box" onclick="setTipo('G')">/GARANZIA</div><div id="box-P" class="tipo-box" onclick="setTipo('P')">PAGAMENTO</div><input type="hidden" name="tipo_int" id="tipo_int_hidden" class="save-data" value="P"></div>
                 </div>
                 <div class="card">
                     <button type="button" class="btn-sync no-print" onclick="importaDaCalendario('tecnico')" title="Carica dati intervento">👨🏼‍🔧👨🏼‍🔧👨🏼‍🔧</button>
@@ -2680,8 +2680,8 @@
             y += 5;
             // Badge tipo intervento su riga propria (mai schiacciato o tagliato,
             // indipendentemente dalla lunghezza del ticket o dell'etichetta)
-            const badgeTxt = d.tipoInt==='G' ? 'ABBONAMENTO / GARANZIA' : 'PAGAMENTO';
-            doc.setFont('helvetica','bold'); doc.setFontSize(8);
+            const badgeTxt = d.tipoInt==='G' ? 'ABBONAMENTO/GARANZIA' : 'PAGAMENTO';
+            doc.setFont('helvetica'); doc.setFontSize(7);
             const bw = doc.getTextWidth(badgeTxt)+8;
             const bx = ML+2;
             doc.setFillColor(...BLUE); doc.roundedRect(bx, y-4, bw, 6.5, 1.2, 1.2, 'F');
