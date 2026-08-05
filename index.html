@@ -2409,9 +2409,21 @@
         });
         document.getElementById('select-ticket-overlay').style.display='flex';
     }
+    // Calcola il numero ticket da usare: il backend (Code.gs) ora restituisce
+    // direttamente "rapportiGiaInviati" — il conteggio di quante volte compare
+    // "RAPPORTO INVIATO" nel testo COMPLETO della descrizione calendario.
+    // (Non si può ricavare da data.problema: quel campo viene troncato dal
+    // backend prima del blocco RAPPORTO INVIATO, che è sempre in fondo).
+    // Se per questo evento risultano già N rapportini inviati, aggiunge il
+    // suffisso "/N" per tenerli distinti (TCK-10154 → TCK-10154/1 → /2...).
+    function _ticketConSuffisso(data) {
+        const base = data.tck || "";
+        const giaInviati = data.rapportiGiaInviati || 0;
+        return giaInviati > 0 ? `${base}/${giaInviati}` : base;
+    }
+
     function applicaDatiCalendario(data) {
-        function applicaDatiCalendario(data) {
-             const tckConSuffisso = data.tck || "";
+        const tckConSuffisso = _ticketConSuffisso(data);
         document.getElementById('n_rapporto_input').value  = tckConSuffisso;
         document.getElementById('macchina_input').value    = (data.matricola || "").toUpperCase();
         document.getElementById('cliente_input').value     = (data.cliente   || "").toUpperCase();
@@ -3155,140 +3167,102 @@
     }
 
     async function condividiWhatsApp() {
-    if (!validaCampiObbligatori()) return;
-    if (!navigator.onLine) { alert("📵 Offline! Connettiti per aggiornare il calendario."); return; }
-    if (!controllaFirma()) return;
-    generaIdUnivoco();
-    const idU = document.getElementById('id_univoco_input').value;
-    let tckVal = document.getElementById('n_rapporto_input').value;
-    if (!tckVal.startsWith("TCK-")) tckVal = "TCK-" + tckVal;
-    const tckBase = tckVal.split('/')[0]; // ripulisce eventuali vecchi suffissi rimasti in bozze salvate
+        if (!validaCampiObbligatori()) return;
+        if (!navigator.onLine) { alert("📵 Offline! Connettiti per aggiornare il calendario."); return; }
+        if (!controllaFirma()) return;
+        generaIdUnivoco();
+        const idU = document.getElementById('id_univoco_input').value;
+        let tckVal = document.getElementById('n_rapporto_input').value;
+        if (!tckVal.startsWith("TCK-")) tckVal = "TCK-" + tckVal;
+        let inviati = JSON.parse(localStorage.getItem('tmc_ticket_inviati') || '[]');
+        if (inviati.includes(tckVal) && !confirm("⚠️ Già chiuso. Vuoi aggiornare?")) return;
 
-    // ── CONTROLLO ANTI-DOPPIONE — PRIMA di generare/condividere il PDF ──
-    let forzaReinvio = false;
-    if (tckBase && tckBase !== "TCK-") {
+        // Chiede se allegare foto PRIMA di procedere. null = utente ha annullato l'invio.
+        const fotoScelte = await chiediFotoAllegate();
+        if (fotoScelte === null) return;
+
+        // Backup automatico e silenzioso: salva sempre un JSON sul dispositivo
+        // prima di procedere con l'invio, senza chiedere conferma.
+        esportaDatiJSON();
+
+        let testoCal = document.getElementById('descrizione_input').value;
+        testoCal += generaRiepilogoCalendario(idU, 'whatsapp');
+
         document.getElementById('loading-overlay').style.display = 'flex';
-        document.getElementById('loading-text').innerText = "Controllo ticket...";
+        document.getElementById('loading-text').innerText = "Generazione PDF...";
+
+        // IMPORTANTE: generiamo PDF e comprimiamo TUTTE le foto QUI, prima
+        // di mostrare l'anteprima — non dopo. Ogni operazione asincrona
+        // (attesa) tra l'ultimo tocco dell'utente e navigator.share() rischia
+        // di far scadere il permesso di condivisione su Android/iOS. Preparando
+        // tutto in anticipo, dopo il tocco "Va bene, invia" nell'anteprima
+        // non resta da fare nient'altro che chiamare share() immediatamente.
+        let pkg;
+        const fileList = [];
         try {
-            const rc = await fetch(APP_SCRIPT_URL, {
-                method: "POST", headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({ action: "check_ticket", ticket: tckBase, pin: localStorage.getItem('tmc_auth_token') })
-            });
-            const dc = await rc.json();
-            document.getElementById('loading-overlay').style.display = 'none';
-            if (dc.success && dc.giaInviati > 0) {
-                const procedi = confirm(
-                    '⚠️ Per il ticket ' + tckBase + ' risulta già inviato ' + dc.giaInviati + ' rapportino/i.\n\n' +
-                    'Premi OK solo se stai CORREGGENDO un errore su questo stesso rapportino ' +
-                    '(stesso numero, sostituisce il precedente).\n\n' +
-                    'Premi ANNULLA se è un nuovo intervento: chiudi qui e crea un nuovo ticket dal gestionale.'
-                );
-                if (!procedi) return;
-                forzaReinvio = true;
+            pkg = await generaPdfPacchetto('Rapporto');
+            fileList.push(new File([pkg.blob], pkg.filename, { type: 'application/pdf' }));
+
+            if (fotoScelte.length > 0) {
+                document.getElementById('loading-text').innerText = "Elaborazione foto...";
+                for (let i = 0; i < fotoScelte.length; i++) {
+                    try {
+                        const blob = await comprimiFoto(fotoScelte[i]);
+                        fileList.push(new File([blob], `foto_${i+1}.jpg`, { type: 'image/jpeg' }));
+                    } catch(e) { /* salta la singola foto se non si riesce a comprimere */ }
+                }
             }
-        } catch (e) {
+        } catch(e) {
             document.getElementById('loading-overlay').style.display = 'none';
-            // Rete debole sul controllo: non blocchiamo qui — la protezione
-            // vera arriva comunque più sotto, nel close_ticket sotto lock.
+            alert('Errore generazione PDF: ' + e.message);
+            return;
         }
-    }
 
-    let inviati = JSON.parse(localStorage.getItem('tmc_ticket_inviati') || '[]');
-    if (inviati.includes(tckVal) && !forzaReinvio && !confirm("⚠️ Già chiuso su questo telefono. Vuoi aggiornare?")) return;
-
-    // Chiede se allegare foto PRIMA di procedere. null = utente ha annullato l'invio.
-    const fotoScelte = await chiediFotoAllegate();
-    if (fotoScelte === null) return;
-
-    // Backup automatico e silenzioso: salva sempre un JSON sul dispositivo
-    // prima di procedere con l'invio, senza chiedere conferma.
-    esportaDatiJSON();
-
-    let testoCal = document.getElementById('descrizione_input').value;
-    testoCal += generaRiepilogoCalendario(idU, 'whatsapp');
-
-    document.getElementById('loading-overlay').style.display = 'flex';
-    document.getElementById('loading-text').innerText = "Generazione PDF...";
-
-    let pkg;
-    const fileList = [];
-    try {
-        pkg = await generaPdfPacchetto('Rapporto');
-        fileList.push(new File([pkg.blob], pkg.filename, { type: 'application/pdf' }));
-
-        if (fotoScelte.length > 0) {
-            document.getElementById('loading-text').innerText = "Elaborazione foto...";
-            for (let i = 0; i < fotoScelte.length; i++) {
-                try {
-                    const blob = await comprimiFoto(fotoScelte[i]);
-                    fileList.push(new File([blob], `foto_${i+1}.jpg`, { type: 'image/jpeg' }));
-                } catch(e) { /* salta la singola foto se non si riesce a comprimere */ }
-            }
-        }
-    } catch(e) {
+        // Tutto pronto: ORA mostriamo l'anteprima e attendiamo il tocco di conferma.
         document.getElementById('loading-overlay').style.display = 'none';
-        alert('Errore generazione PDF: ' + e.message);
-        return;
-    }
+        const confermato = await mostraAnteprimaPdf(pkg.blob);
+        if (!confermato) return; // nessun invio, nessun aggiornamento calendario
 
-    document.getElementById('loading-overlay').style.display = 'none';
-    const confermato = await mostraAnteprimaPdf(pkg.blob);
-    if (!confermato) return; // nessun invio, nessun aggiornamento calendario
-
-    // ── AGGIORNAMENTO CALENDARIO: ora ATTESO, non più fire-and-forget ──
-    // Così, se nei pochi secondi tra il controllo iniziale e adesso è
-    // arrivato un altro invio, il lock server-side lo intercetta
-    // comunque PRIMA della condivisione WhatsApp vera e propria.
-    try {
-        const rClose = await fetch(APP_SCRIPT_URL, {
+        // Da qui in poi TUTTO è sincrono o fire-and-forget: nessuna attesa
+        // tra il tocco di conferma e la chiamata a navigator.share().
+        fetch(APP_SCRIPT_URL, {
             method: "POST",
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({ action: "close_ticket", ticket: tckVal, updateCalendario: testoCal, forzaReinvio, pin: localStorage.getItem('tmc_auth_token') })
-        });
-        const dClose = await rClose.json();
-        if (!dClose.success && dClose.ticketGiaInviato) {
-            const procediComunque = confirm(
-                '⚠️ ' + dClose.error + '\n\n' +
-                'Nel frattempo è arrivato un altro invio per questo ticket.\n\n' +
-                'Vuoi condividere COMUNQUE questo PDF su WhatsApp? Il calendario NON verrà aggiornato automaticamente: avvisa l\'ufficio.'
-            );
-            if (!procediComunque) return;
+            body: JSON.stringify({ action: "close_ticket", ticket: tckVal, updateCalendario: testoCal, pin: localStorage.getItem('tmc_auth_token') })
+        }).catch(() => {});
+
+        if (!inviati.includes(tckVal)) { inviati.push(tckVal); localStorage.setItem('tmc_ticket_inviati', JSON.stringify(inviati)); }
+        let bl = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').filter(b => b.tck !== tckVal);
+        localStorage.setItem('tmc_bozze_locali', JSON.stringify(bl));
+
+        // Share senza await — iOS Safari richiede che sia una chiamata sincrona
+        // nel contesto del gesto utente. Con await la catena si rompe.
+        if (navigator.canShare && navigator.canShare({ files: fileList })) {
+            navigator.share({
+                title: 'Rapporto TMC',
+                text: 'In allegato il rapporto di intervento' + (fileList.length > 1 ? ' e le foto.' : '.'),
+                files: fileList
+            }).catch(e => {
+                if (e.name !== 'AbortError') {
+                    // Fallback download se share fallisce (solo il PDF, le foto restano nella galleria del telefono)
+                    const url = URL.createObjectURL(pkg.blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = pkg.filename;
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                    alert("Condivisione non riuscita. PDF scaricato — allegalo manualmente a WhatsApp.");
+                }
+            });
+        } else {
+            // Browser senza Web Share API — download diretto (solo PDF)
+            const url = URL.createObjectURL(pkg.blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = pkg.filename;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            alert("Il tuo browser non supporta la condivisione diretta.\nPDF scaricato — allegalo manualmente a WhatsApp.");
         }
-    } catch (e) {
-        // Rete debole: non blocchiamo la condivisione (il PDF è già pronto),
-        // il calendario andrà aggiornato manualmente se necessario.
     }
-
-    if (!inviati.includes(tckVal)) { inviati.push(tckVal); localStorage.setItem('tmc_ticket_inviati', JSON.stringify(inviati)); }
-    let bl = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').filter(b => b.tck !== tckVal);
-    localStorage.setItem('tmc_bozze_locali', JSON.stringify(bl));
-
-    // Share senza await — iOS Safari richiede che sia una chiamata sincrona
-    // nel contesto del gesto utente. Con await la catena si rompe.
-    if (navigator.canShare && navigator.canShare({ files: fileList })) {
-        navigator.share({
-            title: 'Rapporto TMC',
-            text: 'In allegato il rapporto di intervento' + (fileList.length > 1 ? ' e le foto.' : '.'),
-            files: fileList
-        }).catch(e => {
-            if (e.name !== 'AbortError') {
-                const url = URL.createObjectURL(pkg.blob);
-                const a = document.createElement('a');
-                a.href = url; a.download = pkg.filename;
-                document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                setTimeout(() => URL.revokeObjectURL(url), 1000);
-                alert("Condivisione non riuscita. PDF scaricato — allegalo manualmente a WhatsApp.");
-            }
-        });
-    } else {
-        const url = URL.createObjectURL(pkg.blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = pkg.filename;
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-        alert("Il tuo browser non supporta la condivisione diretta.\nPDF scaricato — allegalo manualmente a WhatsApp.");
-    }
-}
 
     async function inviaEmailAutomaticamente() {
         if (!validaCampiObbligatori()) return;
@@ -3379,44 +3353,14 @@
 
             const data = await r.json();
             document.getElementById('loading-overlay').style.display = 'none';
-if (data.ticketGiaInviato) {
-    const forza = confirm(
-        '⚠️ ' + data.error + '\n\n' +
-        'Premi OK solo se stai CORREGGENDO un errore su questo stesso rapportino ' +
-        '(stesso numero, sostituisce il precedente).\n\n' +
-        'Premi ANNULLA se è un nuovo intervento: chiudi qui e crea un nuovo ticket dal gestionale.'
-    );
-    if (!forza) return;
-    // Rimanda con la conferma esplicita
-    document.getElementById('loading-overlay').style.display = 'flex';
-    document.getElementById('loading-text').innerText = "Invio in corso...";
-    payload.forzaReinvio = true;
-    const r2 = await fetch(APP_SCRIPT_URL, { method:"POST", headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(payload) });
-    const data2 = await r2.json();
-    document.getElementById('loading-overlay').style.display = 'none';
-    if (data2.success) {
-        mostraEsitoEmail(true, 'Rapporto rinviato correttamente.', data2.destinatari);
-        document.getElementById('er-btn-ok').onclick = () => { chiudiEsitoEmail(); nuovoRapporto(); };
-    } else {
-        mostraEsitoEmail(false, 'Errore dal server: ' + (data2.error || 'Sconosciuto'), null);
-    }
-    return;
-}
-            
             if (data.success) {
-                // Se il server ha corretto il numero (race condition con un altro
-                // tecnico), aggiorna qui riferimenti locali e messaggio a video.
-                const tckFinale = data.ticketFinale || tckVal;
                 const dest = data.destinatari || 'tmcservice@tmcservice.it, info@tmcservice.it';
-                const dettaglio = data.avviso
-                    ? 'Il rapporto è stato consegnato correttamente. Il calendario è stato aggiornato.\n\n⚠️ ' + data.avviso
-                    : 'Il rapporto è stato consegnato correttamente. Il calendario è stato aggiornato.';
-            mostraEsitoEmail(true, dettaglio, dest);
-            if (!inviati.includes(tckFinale)) { inviati.push(tckFinale); localStorage.setItem('tmc_ticket_inviati', JSON.stringify(inviati)); }
-            let bl = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').filter(b => b.tck !== tckVal && b.tck !== tckFinale);
-            localStorage.setItem('tmc_bozze_locali', JSON.stringify(bl));
-            document.getElementById('er-btn-ok').onclick = () => { chiudiEsitoEmail(); nuovoRapporto(); };
-        } else {
+                mostraEsitoEmail(true, 'Il rapporto è stato consegnato correttamente. Il calendario è stato aggiornato.', dest);
+                if (!inviati.includes(tckVal)) { inviati.push(tckVal); localStorage.setItem('tmc_ticket_inviati', JSON.stringify(inviati)); }
+                let bl = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').filter(b => b.tck !== tckVal);
+                localStorage.setItem('tmc_bozze_locali', JSON.stringify(bl));
+                document.getElementById('er-btn-ok').onclick = () => { chiudiEsitoEmail(); nuovoRapporto(); };
+            } else {
                 mostraEsitoEmail(false, 'Errore dal server: ' + (data.error || 'Sconosciuto') + '\n\nRiprova o contatta l\'ufficio.', null);
             }
         } catch (e) {
