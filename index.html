@@ -3354,13 +3354,19 @@
             const data = await r.json();
             document.getElementById('loading-overlay').style.display = 'none';
             if (data.success) {
+                // Se il server ha corretto il numero (race condition con un altro
+                // tecnico), aggiorna qui riferimenti locali e messaggio a video.
+                const tckFinale = data.ticketFinale || tckVal;
                 const dest = data.destinatari || 'tmcservice@tmcservice.it, info@tmcservice.it';
-                mostraEsitoEmail(true, 'Il rapporto è stato consegnato correttamente. Il calendario è stato aggiornato.', dest);
-                if (!inviati.includes(tckVal)) { inviati.push(tckVal); localStorage.setItem('tmc_ticket_inviati', JSON.stringify(inviati)); }
-                let bl = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').filter(b => b.tck !== tckVal);
-                localStorage.setItem('tmc_bozze_locali', JSON.stringify(bl));
-                document.getElementById('er-btn-ok').onclick = () => { chiudiEsitoEmail(); nuovoRapporto(); };
-            } else {
+                const dettaglio = data.avviso
+                    ? 'Il rapporto è stato consegnato correttamente. Il calendario è stato aggiornato.\n\n⚠️ ' + data.avviso
+                    : 'Il rapporto è stato consegnato correttamente. Il calendario è stato aggiornato.';
+            mostraEsitoEmail(true, dettaglio, dest);
+            if (!inviati.includes(tckFinale)) { inviati.push(tckFinale); localStorage.setItem('tmc_ticket_inviati', JSON.stringify(inviati)); }
+            let bl = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').filter(b => b.tck !== tckVal && b.tck !== tckFinale);
+            localStorage.setItem('tmc_bozze_locali', JSON.stringify(bl));
+            document.getElementById('er-btn-ok').onclick = () => { chiudiEsitoEmail(); nuovoRapporto(); };
+        } else {
                 mostraEsitoEmail(false, 'Errore dal server: ' + (data.error || 'Sconosciuto') + '\n\nRiprova o contatta l\'ufficio.', null);
             }
         } catch (e) {
