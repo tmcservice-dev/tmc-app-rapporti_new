@@ -2418,8 +2418,6 @@
     // suffisso "/N" per tenerli distinti (TCK-10154 → TCK-10154/1 → /2...).
     function _ticketConSuffisso(data) {
         const base = data.tck || "";
-        const giaInviati = data.rapportiGiaInviati || 0;
-        return giaInviati > 0 ? `${base}/${giaInviati}` : base;
     }
 
     function applicaDatiCalendario(data) {
