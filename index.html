@@ -2409,15 +2409,13 @@
         });
         document.getElementById('select-ticket-overlay').style.display='flex';
     }
-    // Calcola il numero ticket da usare: il backend (Code.gs) ora restituisce
-    // direttamente "rapportiGiaInviati" — il conteggio di quante volte compare
-    // "RAPPORTO INVIATO" nel testo COMPLETO della descrizione calendario.
-    // (Non si può ricavare da data.problema: quel campo viene troncato dal
-    // backend prima del blocco RAPPORTO INVIATO, che è sempre in fondo).
-    // Se per questo evento risultano già N rapportini inviati, aggiunge il
-    // suffisso "/N" per tenerli distinti (TCK-10154 → TCK-10154/1 → /2...).
+    // Calcola il numero ticket da usare: il ticket NON viene più modificato
+    // in base a quanti rapporti sono già stati inviati per questo evento.
+    // I rapporti ripetuti sullo stesso evento vengono già accodati in
+    // sequenza nella descrizione del calendario da aggiornaTestoCalendario()
+    // (backend), quindi qui basta restituire il ticket così com'è.
     function _ticketConSuffisso(data) {
-        const base = data.tck || "";
+        return data.tck || "";
     }
 
     function applicaDatiCalendario(data) {
