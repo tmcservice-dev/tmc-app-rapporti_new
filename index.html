@@ -845,6 +845,16 @@
         </div>
     </div>
 
+    <!-- OVERLAY ANTI DOPPIO-INVIO — a schermo pieno, richiede una scelta esplicita -->
+    <div id="duplicate-send-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#A32D2D; z-index:100005; flex-direction:column; align-items:center; justify-content:center; padding:24px; box-sizing:border-box; text-align:center;">
+        <div style="font-size:60px; margin-bottom:14px;">⚠️</div>
+        <h2 style="color:white; font-size:21px; margin:0 0 12px; letter-spacing:0.5px;">RAPPORTO GIÀ INVIATO</h2>
+        <p id="dup-send-testo" style="color:white; font-size:15px; line-height:1.5; margin:0 0 6px; max-width:420px;"></p>
+        <p id="dup-send-quando" style="color:#ffd9d9; font-size:13px; margin:0 0 34px;"></p>
+        <button onclick="dupSendConferma()" style="width:100%; max-width:340px; padding:16px; background:white; color:#A32D2D; border:none; border-radius:8px; font-size:15px; font-weight:bold; cursor:pointer; margin-bottom:12px;">✅ SÌ, INVIA DI NUOVO (INTENZIONALE)</button>
+        <button onclick="dupSendAnnulla()" style="width:100%; max-width:340px; padding:16px; background:transparent; color:white; border:2px solid white; border-radius:8px; font-size:15px; font-weight:bold; cursor:pointer;">❌ ANNULLA — NON INVIARE</button>
+    </div>
+
     <!-- CALENDARIO PICKER -->
     <div class="cal-overlay" id="cal-overlay">
         <div class="cal-box">
@@ -941,6 +951,21 @@
     const APP_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwflYcjnY-wzmJBmf8LlRh00vDx-L4ckMISLP27b6Upz7x6eK-1HJeb4EAywFI2R2RxlA/exec";
     const FRASE_SICUREZZA = "";
     const RIT_LABEL = "+ RIT.";
+    const ORE_SCADENZA_SESSIONE = 6; // logout forzato ogni 6 ore dall'ultimo accesso
+
+    // Controlla se la sessione è scaduta e, in caso, rimuove SOLO il token di
+    // accesso (mai bozze o stato del wizard: il lavoro in corso resta intatto
+    // e si ritrova subito dopo aver rifatto il login). Ritorna true se la
+    // sessione era scaduta.
+    function controllaScadenzaAuth() {
+        const authTime = parseInt(localStorage.getItem('tmc_auth_time') || '0');
+        if (authTime > 0 && (Date.now() - authTime) > ORE_SCADENZA_SESSIONE * 60 * 60 * 1000) {
+            localStorage.removeItem('tmc_auth_token');
+            localStorage.removeItem('tmc_auth_time');
+            return true;
+        }
+        return false;
+    }
 
     // ═══════════════════════════════════════════════
     // TOGGLE MODALITÀ
@@ -1361,6 +1386,25 @@
         }
     }
 
+    // La data proposta per il rapportino deve essere SEMPRE quella odierna.
+    // Un problema frequente: lo stato del wizard viene ripristinato da una
+    // sessione precedente (standby, logout forzato, giorno prima) e la
+    // giornata salvata porta ancora la data di quel momento. Qui riportiamo
+    // la data a oggi, ma SOLO se quella giornata è ancora "una proposta"
+    // (un'unica giornata, nessun orario di lavoro compilato per nessun
+    // tecnico): se il tecnico ha già inserito dati reali, o ha già gestito
+    // più giornate a mano, la data non viene mai toccata.
+    function wizAssicuraDataOdierna() {
+        if (wizGiornate.length !== 1) return;
+        const g = wizGiornate[0];
+        const oggi = new Date().toISOString().split('T')[0];
+        if (g.data === oggi) return;
+        const haOrarioCompilato = Object.values(g.orari || {}).some(
+            o => (o.lm1 && o.lm2) || (o.lp1 && o.lp2)
+        );
+        if (!haOrarioCompilato) g.data = oggi;
+    }
+
     function wizAggiungiGiorno() {
         wizSalvaOrariTabCorrente();
         // Default: stessa data + 1 giorno della precedente, stessi tecnici
@@ -1508,6 +1552,7 @@
 
     function wizRenderGiorno() {
         wizInizializzaPrimaGiornata();
+        wizAssicuraDataOdierna();
         const g = wizGiornoCorrente();
         if (!g) return;
 
@@ -2073,6 +2118,52 @@
         document.getElementById('email-result-overlay').style.display = 'none';
     }
 
+    // ── ANTI DOPPIO-INVIO ─────────────────────────────────────
+    // tmc_ticket_inviati contiene {tck, quando} per ogni rapporto già
+    // inviato da questo dispositivo. Se il tecnico prova a inviare di
+    // nuovo lo stesso ticket, un overlay a schermo pieno blocca il flusso
+    // e richiede una scelta esplicita (non un semplice confirm(), troppo
+    // facile da toccare per errore su tablet).
+    let _dupSendResolve = null;
+
+    function _trovaInvioPrecedente(tckVal) {
+        const inviati = JSON.parse(localStorage.getItem('tmc_ticket_inviati') || '[]');
+        return inviati.find(x => (typeof x === 'string' ? x : x.tck) === tckVal) || null;
+    }
+
+    function registraTicketInviato(tckVal) {
+        let inviati = JSON.parse(localStorage.getItem('tmc_ticket_inviati') || '[]');
+        inviati = inviati.filter(x => (typeof x === 'string' ? x : x.tck) !== tckVal);
+        inviati.push({ tck: tckVal, quando: Date.now() });
+        localStorage.setItem('tmc_ticket_inviati', JSON.stringify(inviati));
+    }
+
+    // Ritorna una Promise<boolean>: true se si può procedere con l'invio
+    // (ticket mai inviato, oppure il tecnico ha confermato di volerlo
+    // rifare apposta), false se ha annullato.
+    function controllaInvioDuplicato(tckVal) {
+        const precedente = _trovaInvioPrecedente(tckVal);
+        if (!precedente) return Promise.resolve(true);
+        const quando = (typeof precedente === 'object' && precedente.quando)
+            ? new Date(precedente.quando).toLocaleString('it-IT', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})
+            : null;
+        document.getElementById('dup-send-testo').textContent =
+            `Il rapporto ${tckVal} risulta già stato inviato da questo dispositivo.`;
+        document.getElementById('dup-send-quando').textContent = quando ? `Ultimo invio: ${quando}` : '';
+        document.getElementById('duplicate-send-overlay').style.display = 'flex';
+        return new Promise(resolve => { _dupSendResolve = resolve; });
+    }
+
+    function dupSendConferma() {
+        document.getElementById('duplicate-send-overlay').style.display = 'none';
+        if (_dupSendResolve) _dupSendResolve(true);
+    }
+
+    function dupSendAnnulla() {
+        document.getElementById('duplicate-send-overlay').style.display = 'none';
+        if (_dupSendResolve) _dupSendResolve(false);
+    }
+
     function wizInvia() {
         if (!localStorage.getItem('tmc_sig')) { document.getElementById('werr5').style.display = 'block'; return; }
         document.getElementById('werr5').style.display = 'none';
@@ -2250,6 +2341,29 @@
     }
     // salvaPDF è definita più avanti nella sezione PDF jsPDF
     async function salvaBozzaAttuale() { const ticket = document.getElementById('n_rapporto_input').value; const tecnico = document.getElementsByName('tecnico_1')[0].value || "Nessun Tecnico"; if (!ticket || ticket === "TCK-") { alert("⚠️ Inserisci almeno il numero di rapporto."); return; } const dataInputs = {}; document.querySelectorAll('.save-data').forEach(el => dataInputs[el.name] = (el.type==='checkbox' ? el.checked : el.value)); const payload = { inputs: dataInputs, counts: {r: rowCount, ric: ricCount}, sig: localStorage.getItem('tmc_sig') }; let bozzeLocali = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]'); bozzeLocali = bozzeLocali.filter(b => b.tck !== ticket); bozzeLocali.push({ tck: ticket, tecnico: tecnico, payload: payload, data: Date.now() }); localStorage.setItem('tmc_bozze_locali', JSON.stringify(bozzeLocali)); if (navigator.onLine) { document.getElementById('loading-overlay').style.display = 'flex'; document.getElementById('loading-text').innerText = "Sincronizzazione Cloud..."; try { const res = await fetch(APP_SCRIPT_URL, { method: "POST", headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: "save_cloud", tck: ticket, tecnico: tecnico, content: payload, pin: localStorage.getItem('tmc_auth_token') }) }); const out = await res.json(); if (out.success) { bozzeLocali = bozzeLocali.filter(b => b.tck !== ticket); localStorage.setItem('tmc_bozze_locali', JSON.stringify(bozzeLocali)); alert("✅ Salvato e sincronizzato."); } } catch(e) { alert("⚠️ Connessione debole. Salvato solo sul telefono."); } finally { document.getElementById('loading-overlay').style.display = 'none'; } } else { alert("📵 Offline. Salvato sul telefono."); } if(document.getElementById('drafts-overlay').style.display === 'flex') { apriBozze(); } }
+    // Backup automatico e silenzioso dello stato attuale, da richiamare
+    // prima di ogni invio. A differenza di esportaDatiJSON() (pulsante
+    // manuale "ESPORTA JSON", che scarica un file visibile) questo salva
+    // direttamente nel foglio BOZZE del Cloud: nessun download, nessun
+    // popup, nessuna interazione richiesta al tecnico. Se la rete manca o
+    // la chiamata fallisce non blocca né avvisa: è solo una rete di
+    // sicurezza in più, non deve intralciare l'invio vero e proprio.
+    async function salvaBackupSilenzioso() {
+        if (!navigator.onLine) return;
+        try {
+            const ticket = document.getElementById('n_rapporto_input').value || 'NUOVO';
+            const tecnico = document.getElementsByName('tecnico_1')[0]?.value || 'Sconosciuto';
+            const dataInputs = {};
+            document.querySelectorAll('.save-data').forEach(el => dataInputs[el.name] = (el.type === 'checkbox' ? el.checked : el.value));
+            const payload = { inputs: dataInputs, counts: { r: rowCount, ric: ricCount }, sig: localStorage.getItem('tmc_sig') };
+            await fetch(APP_SCRIPT_URL, {
+                method: "POST",
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action: "save_cloud", tck: ticket, tecnico: tecnico, content: payload, pin: localStorage.getItem('tmc_auth_token') })
+            });
+        } catch(e) { /* backup silenzioso: nessun errore mostrato al tecnico */ }
+    }
+
     async function apriBozze() { document.getElementById('drafts-overlay').style.display = 'flex'; aggiornaListaBozzeLocali(); const cloudContainer = document.getElementById('lista-bozze-cloud'); if (!navigator.onLine) { cloudContainer.innerHTML = "<p style='font-size:12px; color:red;'>📵 Offline.</p>"; return; } cloudContainer.innerHTML = "<p>Download dal Cloud... ⏳</p>"; try { const res = await fetch(APP_SCRIPT_URL, { method: "POST", headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: "get_bozze", pin: localStorage.getItem('tmc_auth_token') }) }); const data = await res.json(); if (data.success) aggiornaListaBozzeCloud(data.bozze); else cloudContainer.innerHTML = "<p style='color:red;'>Errore.</p>"; } catch(e) { cloudContainer.innerHTML = "<p style='color:red;'>Errore rete.</p>"; } }
     function aggiornaListaBozzeLocali() { const container = document.getElementById('lista-bozze-locali'); const bozzeLocali = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]'); container.innerHTML = ""; if(bozzeLocali.length === 0) { container.innerHTML = "<p style='font-size:11px; color:#666;'>Nessuna bozza locale.</p>"; return; } bozzeLocali.forEach(b => { const div = document.createElement('div'); div.className = "draft-item"; let df = new Date(b.data).toLocaleString('it-IT', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); div.innerHTML = `<div style="flex:1;"><strong style="font-size:12px; color:#e65100;">${b.tck}</strong><br><span style="font-size:9px;">${b.tecnico} - ${df}</span></div><div style="display:flex; gap:4px;"><button onclick="caricaBozzaLocale('${b.tck}')" style="background:#25D366; padding:6px; font-size:10px; color:white; border:none; border-radius:3px;">APRI</button><button onclick="sincronizzaManualmente('${b.tck}')" style="background:var(--tmc-blue); padding:6px; font-size:10px; color:white; border:none; border-radius:3px;">☁️</button><button onclick="eliminaBozzaLocale('${b.tck}')" style="background:#ff4444; padding:6px; font-size:10px; color:white; border:none; border-radius:3px;">X</button></div>`; container.appendChild(div); }); }
     function aggiornaListaBozzeCloud(bozze) { const container = document.getElementById('lista-bozze-cloud'); container.innerHTML = ""; if(!bozze || bozze.length === 0) { container.innerHTML = "<p style='font-size:11px; color:#666;'>Nessuna bozza nel Cloud.</p>"; return; } window.bozzeCloud = bozze; bozze.forEach((b, index) => { const div = document.createElement('div'); div.className = "draft-item"; let df = new Date(b.data).toLocaleString('it-IT', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); div.innerHTML = `<div style="flex:1;"><strong style="font-size:12px; color:#1565c0;">${b.tck}</strong><br><span style="font-size:9px;">${b.tecnico} - ${df}</span></div><div style="display:flex; gap:4px;"><button onclick="caricaBozzaCloud(${index})" style="background:#25D366; padding:6px; font-size:10px; color:white; border:none; border-radius:3px;">APRI</button><button onclick="eliminaBozzaCloudUI('${b.tck}')" style="background:#ff4444; padding:6px; font-size:10px; color:white; border:none; border-radius:3px;">X</button></div>`; container.appendChild(div); }); }
@@ -2425,6 +2539,10 @@
         document.getElementById('cliente_input').value     = (data.cliente   || "").toUpperCase();
         document.getElementById('indirizzo_input').value   = (data.indirizzo || "").toUpperCase();
         document.getElementById('email_input').value       = data.email ? data.email.toLowerCase() : "";
+        // Tipo intervento (Garanzia/Abbonamento = G, Pagamento = P): compilato
+        // automaticamente se il calendario contiene un riferimento esplicito.
+        // Resta comunque modificabile a mano toccando i pulsanti G/P.
+        if (data.tipoIntervento) setTipo(data.tipoIntervento);
         const resp = document.getElementsByName('nome_responsabile')[0];
         if (resp) {
             if(data.contatto) resp.value = data.contatto.toUpperCase();
@@ -3170,16 +3288,15 @@
         const idU = document.getElementById('id_univoco_input').value;
         let tckVal = document.getElementById('n_rapporto_input').value;
         if (!tckVal.startsWith("TCK-")) tckVal = "TCK-" + tckVal;
-        let inviati = JSON.parse(localStorage.getItem('tmc_ticket_inviati') || '[]');
-        if (inviati.includes(tckVal) && !confirm("⚠️ Già chiuso. Vuoi aggiornare?")) return;
+        const procediInvioWA = await controllaInvioDuplicato(tckVal);
+        if (!procediInvioWA) return;
 
         // Chiede se allegare foto PRIMA di procedere. null = utente ha annullato l'invio.
         const fotoScelte = await chiediFotoAllegate();
         if (fotoScelte === null) return;
 
-        // Backup automatico e silenzioso: salva sempre un JSON sul dispositivo
-        // prima di procedere con l'invio, senza chiedere conferma.
-        esportaDatiJSON();
+        // Backup automatico e silenzioso su Cloud (nessun download visibile).
+        salvaBackupSilenzioso();
 
         let testoCal = document.getElementById('descrizione_input').value;
         testoCal += generaRiepilogoCalendario(idU, 'whatsapp');
@@ -3221,13 +3338,31 @@
 
         // Da qui in poi TUTTO è sincrono o fire-and-forget: nessuna attesa
         // tra il tocco di conferma e la chiamata a navigator.share().
-        fetch(APP_SCRIPT_URL, {
-            method: "POST",
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({ action: "close_ticket", ticket: tckVal, updateCalendario: testoCal, pin: localStorage.getItem('tmc_auth_token') })
-        }).catch(() => {});
+        //
+        // IMPORTANTE: un fetch() normale, lanciato un istante prima che
+        // l'app passi in background (navigator.share() apre subito dopo
+        // WhatsApp), può venire interrotto dal sistema operativo prima di
+        // arrivare al server — su alcuni tablet Android è proprio questo
+        // il motivo per cui il calendario a volte NON viene aggiornato.
+        // navigator.sendBeacon() è pensato apposta per queste richieste
+        // "e vai", ed è garantito che il browser tenti di consegnarle anche
+        // se la pagina passa subito in background o viene chiusa.
+        const bodyChiusura = JSON.stringify({ action: "close_ticket", ticket: tckVal, updateCalendario: testoCal, pin: localStorage.getItem('tmc_auth_token') });
+        let beaconInviato = false;
+        if (navigator.sendBeacon) {
+            beaconInviato = navigator.sendBeacon(APP_SCRIPT_URL, bodyChiusura);
+        }
+        if (!beaconInviato) {
+            // sendBeacon non disponibile o ha rifiutato (coda piena/payload
+            // troppo grande): fallback al fetch classico, meglio di niente.
+            fetch(APP_SCRIPT_URL, {
+                method: "POST",
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: bodyChiusura
+            }).catch(() => {});
+        }
 
-        if (!inviati.includes(tckVal)) { inviati.push(tckVal); localStorage.setItem('tmc_ticket_inviati', JSON.stringify(inviati)); }
+        registraTicketInviato(tckVal);
         let bl = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').filter(b => b.tck !== tckVal);
         localStorage.setItem('tmc_bozze_locali', JSON.stringify(bl));
 
@@ -3268,16 +3403,15 @@
         const idU = document.getElementById('id_univoco_input').value;
         let tckVal = document.getElementById('n_rapporto_input').value;
         if (!tckVal.startsWith("TCK-")) tckVal = "TCK-" + tckVal;
-        let inviati = JSON.parse(localStorage.getItem('tmc_ticket_inviati') || '[]');
-        if (inviati.includes(tckVal) && !confirm("⚠️ Già inviato. Ri-inviare?")) return;
+        const procediInvioMail = await controllaInvioDuplicato(tckVal);
+        if (!procediInvioMail) return;
 
         // Chiede se allegare foto PRIMA di procedere. null = utente ha annullato l'invio.
         const fotoScelte = await chiediFotoAllegate();
         if (fotoScelte === null) return;
 
-        // Backup automatico e silenzioso: salva sempre un JSON sul dispositivo
-        // prima di procedere con l'invio, senza chiedere conferma.
-        esportaDatiJSON();
+        // Backup automatico e silenzioso su Cloud (nessun download visibile).
+        salvaBackupSilenzioso();
 
         let testoCal = document.getElementById('descrizione_input').value;
         testoCal += generaRiepilogoCalendario(idU, 'mail');
@@ -3352,7 +3486,7 @@
             if (data.success) {
                 const dest = data.destinatari || 'tmcservice@tmcservice.it, info@tmcservice.it';
                 mostraEsitoEmail(true, 'Il rapporto è stato consegnato correttamente. Il calendario è stato aggiornato.', dest);
-                if (!inviati.includes(tckVal)) { inviati.push(tckVal); localStorage.setItem('tmc_ticket_inviati', JSON.stringify(inviati)); }
+                registraTicketInviato(tckVal);
                 let bl = JSON.parse(localStorage.getItem('tmc_bozze_locali') || '[]').filter(b => b.tck !== tckVal);
                 localStorage.setItem('tmc_bozze_locali', JSON.stringify(bl));
                 document.getElementById('er-btn-ok').onclick = () => { chiudiEsitoEmail(); nuovoRapporto(); };
@@ -3510,7 +3644,7 @@
     wizContaChar();
     calc();}
     function attachListeners(){document.querySelectorAll('.save-data').forEach(el=>{el.oninput=calc;});}
-    function nuovoRapporto(){if(confirm("Cancellare tutto e iniziare un nuovo rapporto?")){localStorage.removeItem('tmc_bozza');localStorage.removeItem('tmc_counts');localStorage.removeItem('tmc_sig');location.reload();}}
+    function nuovoRapporto(){if(confirm("Cancellare tutto e iniziare un nuovo rapporto?")){localStorage.removeItem('tmc_bozza');localStorage.removeItem('tmc_counts');localStorage.removeItem('tmc_sig');localStorage.removeItem('tmc_wizard_state');location.reload();}}
     // (Listener stampa rimossi: il PDF è ora generato direttamente da jsPDF, non più via window.print)
     // Init data wizard al giorno corrente
     // (w_data rimosso: ora le date sono gestite per giornata in wizGiornate)
@@ -3533,15 +3667,19 @@
             canvas.addEventListener('touchend', () => drawing=false);
         }
         const savedPin = localStorage.getItem('tmc_auth_token');
-        const authTime = parseInt(localStorage.getItem('tmc_auth_time') || '0');
-        const ORE_SCADENZA = 24;
-        const scaduto = authTime > 0 && (Date.now() - authTime) > ORE_SCADENZA * 60 * 60 * 1000;
-        if (scaduto) {
-            localStorage.removeItem('tmc_auth_token');
-            localStorage.removeItem('tmc_auth_time');
-        }
+        const scaduto = controllaScadenzaAuth();
         if(savedPin && savedPin !== '' && !scaduto) sbloccaApp();
         else { document.getElementById('login-overlay').style.display = 'flex'; document.getElementById('app-content').style.display = 'none'; }
+        // Ricontrolla periodicamente anche ad app già sbloccata: se il tablet
+        // resta acceso per più di 6 ore consecutive senza mai essere
+        // ricaricato, forza comunque l'uscita (bozza e stato wizard restano
+        // salvati e si ritrovano intatti dopo il nuovo accesso).
+        setInterval(function() {
+            if (controllaScadenzaAuth()) {
+                alert("⏱️ Sessione scaduta dopo 6 ore. Effettua di nuovo l'accesso.");
+                location.reload();
+            }
+        }, 5 * 60 * 1000);
         document.getElementById('pin_input').addEventListener("keypress", function(e){ if(e.key==="Enter"){ e.preventDefault(); verificaLogin(); } });
         document.getElementById('email_tecnico_input').addEventListener("keypress", function(e){ if(e.key==="Enter"){ e.preventDefault(); salvaEmailTecnico(); } });
         wizUpdateProgress();
