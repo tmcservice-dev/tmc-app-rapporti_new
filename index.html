@@ -228,6 +228,9 @@
         .tecnico-combo { position: relative; width: 100%; height: 25px; }
         .tecnico-input-main { position: absolute; top: 0; left: 0; width: calc(100% - 25px); border-bottom: 1px solid #cce0f5; z-index: 2; background: white; text-transform: uppercase; }
         .tecnico-select-bg { width: 100%; position: relative; z-index: 1; }
+        td.tec-cell { position: relative; }
+        td.tec-cell .tec-pick { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: none; padding: 0; margin: 0; font-size: 16px; z-index: 3; }
+        td.tec-cell input[name^="tec_"] { cursor: pointer; }
         table { width: 100%; border-collapse: collapse; border: 1px solid var(--tmc-blue); margin-top: 5px; }
         th { background: var(--tmc-light-blue); font-size: 7px; border: 1px solid var(--tmc-blue); padding: 5px 2px; color: var(--tmc-blue); }
         td { border: 1px solid var(--tmc-blue); padding: 3px 1px; text-align: center; }
@@ -2676,8 +2679,13 @@
         // Rimuove caratteri non Latin-1 (es. emoji) sostituendoli con spazio,
         // normalizza solo gli spazi orizzontali (non i newline, che vanno preservati
         // per mantenere l'a-capo tra "PROBLEMA RISCONTRATO" e "LAVORO ESEGUITO").
-        return (s || '')
+        // Tutto ciò che finisce nel PDF è forzato in MAIUSCOLO. Si maiuscola
+        // carattere per carattere solo se il risultato resta Latin-1 (es. 'ÿ'→'Ÿ'
+        // o 'µ'→'Μ' uscirebbero dal set gestito da jsPDF: in quel caso il
+        // carattere resta com'è).
+        return String(s == null ? '' : s)
             .replace(/[^\x00-\xFF]/g, ' ')      // fuori Latin-1 → spazio
+            .replace(/[\s\S]/g, c => { const u = c.toUpperCase(); return (u.length === 1 && u.charCodeAt(0) <= 0xFF) ? u : c; })
             .split('\n')
             .map(riga => riga.replace(/[ \t]+/g, ' ').trim())
             .join('\n')
@@ -2836,7 +2844,7 @@
             disegnaFooterImmagine();
             doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(...GRAY);
             doc.text(_san(d.ticket||''), ML, PH-3);
-            doc.text(`Pagina ${numPag} di ${totPag}`, PW-MR, PH-3, {align:'right'});
+            doc.text(`PAGINA ${numPag} DI ${totPag}`, PW-MR, PH-3, {align:'right'});
         }
 
         function nuovaPagina() {
@@ -2862,9 +2870,9 @@
         // l'header leggero su quelle pagine (mai le tabelle stesse,
         // che autoTable continua da sola con l'intestazione di colonna).
         const orariBody = (d.orari.length ? d.orari : [{}]).map(o => [
-            o.data||'', o.tecnico||'',
-            o.va1||'', o.va2||'', o.lm1||'', o.lm2||'',
-            o.lp1||'', o.lp2||'', o.vr1||'', o.vr2||'',
+            _san(o.data), _san(o.tecnico),
+            _san(o.va1), _san(o.va2), _san(o.lm1), _san(o.lm2),
+            _san(o.lp1), _san(o.lp2), _san(o.vr1), _san(o.vr2),
             '' // colonna P/C/H: contenuto vuoto, disegnata interamente in didDrawCell
         ]);
         const pchFlags = (d.orari.length ? d.orari : [{}]).map(o => ({ p: !!o.p, c: !!o.c, h: !!o.h }));
@@ -2934,8 +2942,8 @@
             doc.autoTable({
                 startY: y,
                 head:[['CODICE','DESCRIZIONE','Q.TÀ','UNIT. €','TOT. €']],
-                body: d.ricambi.map(r=>[r.codice,r.descrizione,r.qta,r.unit,r.tot]),
-                foot: d.totaleMat ? [[{content:'TOTALE:',colSpan:4,styles:{halign:'right',fontStyle:'bold'}},d.totaleMat]] : [],
+                body: d.ricambi.map(r=>[_san(r.codice),_san(r.descrizione),_san(r.qta),_san(r.unit),_san(r.tot)]),
+                foot: d.totaleMat ? [[{content:'TOTALE:',colSpan:4,styles:{halign:'right',fontStyle:'bold'}},_san(d.totaleMat)]] : [],
                 theme:'grid',
                 styles:{fontSize:7.5,cellPadding:1.3,lineColor:BLUE,lineWidth:0.2,textColor:BLACK,valign:'middle'},
                 headStyles:{fillColor:LBLUE,textColor:BLUE,fontStyle:'bold',fontSize:7},
@@ -3541,7 +3549,35 @@
         return r;
     }
     function setTipo(val) { document.getElementById('tipo_int_hidden').value=val; document.getElementById('box-G').className='tipo-box'+(val==='G'?' active':''); document.getElementById('box-P').className='tipo-box'+(val==='P'?' active':''); saveDraft(); }
-    function addRow() { rowCount++; const tr=document.createElement('tr'); tr.innerHTML=`<td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data" name="d_${rowCount}" placeholder="Data" readonly style="font-size:9px; text-align:center; width:100%; pointer-events:none; border:none; background:transparent;"></td><td><input type="text" class="save-data caps" name="tec_${rowCount}" placeholder="Nome" style="font-size:8px; text-align:center; width:100%;"><div id="ore_riga_${rowCount}" style="font-size:7px; color:var(--tmc-blue); font-weight:bold; margin-top:2px;"></div></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="va1_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="va2_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="lm1_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="lm2_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="lp1_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="lp2_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="vr1_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="vr2_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><div class="pch-row-a4" style="pointer-events:none;">P<input type="checkbox" class="save-data" name="p_${rowCount}">C<input type="checkbox" class="save-data" name="c_${rowCount}">H<input type="checkbox" class="save-data" name="h_${rowCount}"></div></td><td class="no-print"><button type="button" onclick="eliminaRigaOre(this)" style="background:#ff4444; color:white; border:none; border-radius:3px; padding:3px 6px; font-weight:bold; cursor:pointer;">X</button></td>`; document.getElementById('table-body').appendChild(tr); attachListeners(); }
+    // ── Menu a tendina TECNICO nelle righe della tabella orari ──
+    // Le opzioni sono i nominativi presenti in "Tecnici Incaricati" (campi tecnico_N).
+    // L'input tec_N resta la fonte di verità (bozze, wizard, PDF invariati): la select
+    // è solo un selettore trasparente sovrapposto alla cella.
+    function getTecniciIncaricati() {
+        const out = [];
+        document.querySelectorAll('input[name^="tecnico_"]').forEach(el => {
+            const v = (el.value || '').trim().toUpperCase();
+            if (v && !out.includes(v)) out.push(v);
+        });
+        return out;
+    }
+    function popolaSelectTecRiga(sel) {
+        const inp = sel.parentElement.querySelector('input[name^="tec_"]');
+        const corrente = ((inp && inp.value) || '').trim().toUpperCase();
+        const nomi = getTecniciIncaricati();
+        if (corrente && !nomi.includes(corrente)) nomi.push(corrente); // nome non più in elenco: resta selezionabile
+        sel.innerHTML = '<option value="">— NESSUNO —</option>' +
+            nomi.map(n => `<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join('');
+        sel.value = corrente;
+    }
+    function scegliTecnicoRiga(sel) {
+        const inp = sel.parentElement.querySelector('input[name^="tec_"]');
+        if (!inp) return;
+        inp.value = (sel.value || '').toUpperCase();
+        calc();
+        saveDraft();
+    }
+    function addRow() { rowCount++; const tr=document.createElement('tr'); tr.innerHTML=`<td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data" name="d_${rowCount}" placeholder="Data" readonly style="font-size:9px; text-align:center; width:100%; pointer-events:none; border:none; background:transparent;"></td><td class="tec-cell"><input type="text" class="save-data caps" name="tec_${rowCount}" placeholder="Nome" readonly style="font-size:8px; text-align:center; width:100%; pointer-events:none;"><select class="tec-pick" aria-label="Seleziona tecnico" onmousedown="popolaSelectTecRiga(this)" onfocus="popolaSelectTecRiga(this)" ontouchstart="popolaSelectTecRiga(this)" onchange="scegliTecnicoRiga(this)"></select><div id="ore_riga_${rowCount}" style="font-size:7px; color:var(--tmc-blue); font-weight:bold; margin-top:2px;"></div></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="va1_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="va2_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="lm1_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="lm2_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="lp1_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="lp2_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="vr1_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><input type="text" class="save-data time-select" name="vr2_${rowCount}" readonly style="pointer-events:none;"></td><td onclick="apriEditorOrari(${rowCount})" style="cursor:pointer;"><div class="pch-row-a4" style="pointer-events:none;">P<input type="checkbox" class="save-data" name="p_${rowCount}">C<input type="checkbox" class="save-data" name="c_${rowCount}">H<input type="checkbox" class="save-data" name="h_${rowCount}"></div></td><td class="no-print"><button type="button" onclick="eliminaRigaOre(this)" style="background:#ff4444; color:white; border:none; border-radius:3px; padding:3px 6px; font-weight:bold; cursor:pointer;">X</button></td>`; document.getElementById('table-body').appendChild(tr); attachListeners(); }
     function eliminaRigaOre(btn) { if(!confirm("Eliminare questa riga?"))return; btn.closest('tr').remove(); rinumeraRigheOre(); calc(); }
     function rinumeraRigheOre() { const righe=document.querySelectorAll('#table-body tr'); rowCount=righe.length; righe.forEach((tr,index)=>{ const i=index+1; tr.querySelectorAll('input, div').forEach(el=>{ if(el.name)el.name=el.name.replace(/_\d+$/,'_'+i); if(el.id)el.id=el.id.replace(/_\d+$/,'_'+i); }); tr.querySelectorAll('td[onclick]').forEach(td=>{ td.setAttribute('onclick',`apriEditorOrari(${i})`); }); }); saveDraft(); }
     let currentEditRow = null;
