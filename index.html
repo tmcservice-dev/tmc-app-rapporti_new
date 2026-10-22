@@ -347,7 +347,7 @@
             <div style="background:#f0f7ff; padding:8px; text-align:center; border-bottom:1px solid #ddd;">
                 <button onclick="inserisciSeparatoreTesto('editor_fullscreen')" style="background:#ff9800; color:white; border:none; padding:8px 15px; border-radius:4px; font-weight:bold; font-size:11px; cursor:pointer;">➖ INSERISCI RIGA "LAVORO ESEGUITO"</button>
             </div>
-            <textarea id="editor_fullscreen" class="caps" style="flex:1; width:100%; border:none; padding:15px; font-size:16px; outline:none; resize:none; box-sizing:border-box;" placeholder="Scrivi qui tutti i dettagli..."></textarea>
+            <textarea id="editor_fullscreen" style="flex:1; width:100%; border:none; padding:15px; font-size:16px; outline:none; resize:none; box-sizing:border-box;" placeholder="Scrivi qui tutti i dettagli..."></textarea>
             <div style="padding:15px; display:flex; gap:10px; background:#f9f9f9; border-top:1px solid #ddd;">
                 <button onclick="chiudiEditorTesto(false)" style="flex:1; padding:15px; background:#eee; color:#333; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">ANNULLA</button>
                 <button onclick="chiudiEditorTesto(true)" style="flex:1; padding:15px; background:#25D366; color:white; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">CONFERMA E SALVA</button>
@@ -603,7 +603,7 @@
                     <label>🔧 Lavoro eseguito <span style="color:#A32D2D;">*</span></label>
                     <textarea id="w_lavoro" rows="5"
                         placeholder="Descrivi gli interventi eseguiti..."
-                        oninput="this.value=this.value.toUpperCase(); wizContaChar(); wizAggiornaTesto();"></textarea>
+                        oninput="wizContaChar(); wizAggiornaTesto();"></textarea>
                     <div class="char-bar" id="w-char-bar">0 caratteri</div>
                 </div>
 
@@ -767,7 +767,7 @@
                         <button type="button" class="no-print" onclick="inserisciSeparatoreTesto('descrizione_input')" style="background:#ff9800; color:white; border:none; border-radius:3px; font-size:9px; padding:3px 8px; font-weight:bold; cursor:pointer;">➖ SEPARA LAVORO</button>
                         <button type="button" class="no-print" onclick="apriEditorTesto()" style="background:var(--tmc-light-blue); color:var(--tmc-blue); border:1px solid var(--tmc-blue); border-radius:3px; font-size:9px; padding:3px 8px; font-weight:bold; cursor:pointer;">⛶ ESPANDI</button>
                     </div></div>
-                    <textarea id="descrizione_input" name="descrizione" class="save-data caps" rows="3" style="margin-top:5px;"></textarea><div id="descrizione_print" class="caps" style="display:none; white-space: pre-wrap; word-break: break-word; font-size: 12px; min-height: 45px; border-bottom: 1px solid #cce0f5; padding: 4px 0;"></div>
+                    <textarea id="descrizione_input" name="descrizione" class="save-data" rows="3" style="margin-top:5px;"></textarea><div id="descrizione_print" class="caps" style="display:none; white-space: pre-wrap; word-break: break-word; font-size: 12px; min-height: 45px; border-bottom: 1px solid #cce0f5; padding: 4px 0;"></div>
                 </div>
                 <table><thead><tr><th class="no-print" style="width:8%">US.</th><th style="width:13%">CODICE</th><th style="width:39%">RICAMBIO</th><th style="width:9%">Q.TÀ</th><th style="width:15%">UNIT. €</th><th style="width:16%">TOT. €</th></tr></thead><tbody id="ricambi-body"></tbody><tfoot><tr><td colspan="5" style="text-align:right; font-weight:bold; padding-right:5px;">TOTALE MATERIALI:</td><td><input type="text" id="gran-totale" name="gran_totale" class="save-data" style="font-weight:bold; color:var(--tmc-blue); width:100%; text-align:center; background:transparent;" placeholder="0.00 €"></td></tr></tfoot></table>
                 <div class="bottom-grid">
@@ -1833,7 +1833,7 @@
     // ── STEP 4: DESCRIZIONE CON STRUTTURA FISSA ───────────────
     function wizAggiornaTesto() {
         const problema = (document.getElementById('w_problema')?.value || '').trim().toUpperCase();
-        const lavoro   = (document.getElementById('w_lavoro')?.value   || '').trim().toUpperCase();
+        const lavoro   = (document.getElementById('w_lavoro')?.value   || '').trim();
         const testo = [
             problema ? 'PROBLEMA RISCONTRATO:\n' + problema : 'PROBLEMA RISCONTRATO:\n[NON SPECIFICATO]',
             '',
@@ -2674,18 +2674,21 @@
         return _pdfImgPromise;
     }
 
-    // Rimuove caratteri non Latin-1 che jsPDF non gestisce
-    function _san(s) {
-        // Rimuove caratteri non Latin-1 (es. emoji) sostituendoli con spazio,
-        // normalizza solo gli spazi orizzontali (non i newline, che vanno preservati
-        // per mantenere l'a-capo tra "PROBLEMA RISCONTRATO" e "LAVORO ESEGUITO").
-        // Tutto ciò che finisce nel PDF è forzato in MAIUSCOLO. Si maiuscola
-        // carattere per carattere solo se il risultato resta Latin-1 (es. 'ÿ'→'Ÿ'
-        // o 'µ'→'Μ' uscirebbero dal set gestito da jsPDF: in quel caso il
-        // carattere resta com'è).
-        return String(s == null ? '' : s)
-            .replace(/[^\x00-\xFF]/g, ' ')      // fuori Latin-1 → spazio
-            .replace(/[\s\S]/g, c => { const u = c.toUpperCase(); return (u.length === 1 && u.charCodeAt(0) <= 0xFF) ? u : c; })
+    // Rimuove caratteri non Latin-1 che jsPDF non gestisce.
+    // Di default forza il MAIUSCOLO (tutti i campi del PDF); con
+    // mantieniCase = true il testo resta com'è scritto (usato per la
+    // descrizione del lavoro eseguito). Gli spazi orizzontali vengono
+    // normalizzati ma i newline sono preservati, per mantenere l'a-capo
+    // tra "PROBLEMA RISCONTRATO" e "LAVORO ESEGUITO".
+    function _san(s, mantieniCase) {
+        let t = String(s == null ? '' : s).replace(/[^\x00-\xFF]/g, ' '); // fuori Latin-1 → spazio
+        if (!mantieniCase) {
+            // Si maiuscola carattere per carattere solo se il risultato resta
+            // Latin-1 (es. 'ÿ'→'Ÿ' o 'µ'→'Μ' uscirebbero dal set gestito da
+            // jsPDF: in quel caso il carattere resta com'è).
+            t = t.replace(/[\s\S]/g, c => { const u = c.toUpperCase(); return (u.length === 1 && u.charCodeAt(0) <= 0xFF) ? u : c; });
+        }
+        return t
             .split('\n')
             .map(riga => riga.replace(/[ \t]+/g, ' ').trim())
             .join('\n')
@@ -2980,7 +2983,8 @@
         // (banner + titolo + box cliente), MAI le tabelle orari/ricambi.
         const descrFontSize = 9, descrLineH = 4.5;
         doc.setFont('helvetica','normal'); doc.setFontSize(descrFontSize); doc.setTextColor(...BLACK);
-        const descrLines = doc.splitTextToSize(_san(d.descr || '—'), CW-6);
+        // La descrizione mantiene maiuscole/minuscole come scritte dal tecnico
+        const descrLines = doc.splitTextToSize(_san(d.descr || '—', true), CW-6);
 
         // Individua l'indice della riga separatore "----..." che precede "LAVORO ESEGUITO:"
         // così possiamo evitare che vada a fine pagina da sola (riga orfana).
